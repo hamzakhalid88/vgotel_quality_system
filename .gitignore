@@ -1,0 +1,43 @@
+# .gitignore create
+@"
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+
+# Logs and databases
+*.log
+*.db
+*.sqlite3
+
+# Environment variables
+.env
+
+# Distribution
+build/
+dist/
+*.egg-info/
+"@ | Out-File -FilePath .gitignore -Encoding utf8
+
+# Add .gitignore
+git add .gitignore
+
+# Set Git user
+git config --global user.email "hamzakhalid88@gmail.com"
+git config --global user.name "hamzakhalid88"
+
+# Commit
+git commit -m "Initial commit: Vgotel Quality System"
+
+# Push
+git push -u origin main
