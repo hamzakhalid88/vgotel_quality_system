@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>JAZA Security | Premium Invoice Suite</title>
+    <!-- html2canvas + jsPDF for PDF rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* ========== THEME PALETTE — INSPIRED BY JAZA LOGO COLORS ========== */
+        :root {
+            --jaza-deep-navy: #0B1E33;      /* authoritative dark base — from logo shield */
+            --jaza-royal-blue: #1A3A5F;     /* depth & trust */
+            --jaza-burnt-orange: #E46A1A;   /* energetic accent, matches camera lens core */
+            --jaza-golden-amber: #F5A623;   /* warmth & reliability */
+            --jaza-graphite: #2C3E4E;
+            --jaza-soft-mist: #F4F7FC;
+            --jaza-silver-edge: #CFDDEB;
+            --jaza-white: #FFFFFF;
+            --shadow-sm: 0 12px 28px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 20px 35px -12px rgba(0, 0, 0, 0.2);
+        }
+
+        body {
+            background: linear-gradient(145deg, #E9EEF3 0%, #DFE6ED 100%);
+            font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+            padding: 30px 20px 50px;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700;14..32,800&display=swap');
+
+        .app-container {
+            max-width: 1150px;
+            margin: 0 auto;
+        }
+
+        /* Cards with theme synergy */
+        .form-card {
+            background: var(--jaza-white);
+            border-radius: 28px;
+            padding: 26px 28px;
+            margin-bottom: 28px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(10, 30, 50, 0.08);
+            transition: transform 0.2s ease;
+        }
+
+        .form-title {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: var(--jaza-deep-navy);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 22px;
+            border-left: 5px solid var(--jaza-burnt-orange);
+            padding-left: 18px;
+            letter-spacing: -0.2px;
+        }
+
+        .row-flex {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            margin-bottom: 22px;
+        }
+
+        .field {
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .field label {
+            display: block;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--jaza-graphite);
+            letter-spacing: 0.6px;
+            margin-bottom: 8px;
+        }
+
+        .field input, .field textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1.5px solid var(--jaza-silver-edge);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-family: 'Inter', monospace;
+            background: #FFFFFF;
+            transition: all 0.2s;
+        }
+
+        .field input:focus, .field textarea:focus {
+            outline: none;
+            border-color: var(--jaza-burnt-orange);
+            box-shadow: 0 0 0 4px rgba(228, 106, 26, 0.15);
+        }
+
+        /* Items manager table */
+        .items-manager {
+            overflow-x: auto;
+            margin: 20px 0 20px;
+            border-radius: 24px;
+        }
+
+        .manager-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            background: var(--jaza-soft-mist);
+            border-radius: 24px;
+            overflow: hidden;
+        }
+
+        .manager-table th,
+        .manager-table td {
+            border: 1px solid var(--jaza-silver-edge);
+            padding: 12px 8px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .manager-table th {
+            background: var(--jaza-deep-navy);
+            color: white;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .action-btns button {
+            background: none;
+            border: none;
+            padding: 5px 14px;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        .edit-btn { background: #FFF1E0; color: var(--jaza-burnt-orange); border: 1px solid #FFD8B5; }
+        .delete-btn { background: #FFECEC; color: #B22222; border: 1px solid #FFC9C9; }
+        .edit-btn:hover, .delete-btn:hover { filter: brightness(0.94); transform: scale(0.96); }
+
+        .add-item-area {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-end;
+            margin-top: 16px;
+        }
+
+        button {
+            background: linear-gradient(105deg, var(--jaza-burnt-orange), var(--jaza-golden-amber));
+            border: none;
+            color: white;
+            font-weight: 700;
+            padding: 12px 28px;
+            border-radius: 60px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: 'Inter', sans-serif;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        button:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.03);
+            box-shadow: 0 12px 20px -8px rgba(228,106,26,0.4);
+        }
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--jaza-burnt-orange);
+            color: var(--jaza-burnt-orange);
+            box-shadow: none;
+        }
+        .btn-outline:hover {
+            background: var(--jaza-burnt-orange);
+            color: white;
+        }
+
+        /* INVOICE CARD — elegant premium match with logo theme */
+        .invoice-pdf-container {
+            background: var(--jaza-white);
+            border-radius: 32px;
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+            margin-top: 10px;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .invoice-card {
+            background: var(--jaza-white);
+            padding: 36px 38px 42px;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+        }
+
+        /* header with logo integration */
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 28px;
+            padding-bottom: 20px;
+            border-bottom: 4px solid var(--jaza-burnt-orange);
+        }
+
+        .logo-camera {
+            display: flex;
+            align-items: center;
+        }
+
+        .jaza-logo-container {
+            width: 100px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .jaza-logo-img {
+            max-width: 200%;
+            max-height: 110%;
+            object-fit: contain;
+            border-radius: 20px;
+            margin-bottom: 30px;
+        }
+
+        .logo-fallback {
+            width: 90px;
+            height: 90px;
+            background: linear-gradient(145deg, var(--jaza-deep-navy), #0F2A44);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 18px -5px rgba(0,0,0,0.25);
+        }
+
+        .logo-fallback svg {
+            width: 70px;
+            height: 70px;
+        }
+
+        .brand-text h1 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--jaza-deep-navy) 30%, var(--jaza-royal-blue) 80%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            line-height: 1.2;
+        }
+        .brand-text p {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--jaza-burnt-orange);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-top: 6px;
+        }
+        .brand-tagline {
+            font-size: 0.65rem;
+            color: var(--jaza-graphite);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .invoice-meta {
+            text-align: right;
+        }
+        .inv-number {
+            font-size: 1rem;
+            font-weight: 800;
+            background: rgba(228, 106, 26, 0.12);
+            padding: 7px 22px;
+            border-radius: 60px;
+            display: inline-block;
+            color: var(--jaza-burnt-orange);
+            border: 1px solid rgba(228,106,26,0.3);
+        }
+        .invoice-date {
+            margin-top: 10px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--jaza-deep-navy);
+        }
+
+        .info-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            background: linear-gradient(115deg, #F9FCFE, #F4F9FF);
+            padding: 20px 24px;
+            border-radius: 28px;
+            margin: 20px 0 28px;
+            border-left: 6px solid var(--jaza-burnt-orange);
+        }
+        .info-block h4 {
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--jaza-burnt-orange);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+        .info-block p {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--jaza-deep-navy);
+        }
+        .addr-text {
+            font-weight: 500;
+            font-size: 0.85rem;
+            color: #2F4858;
+        }
+
+        /* invoice table with theme borders */
+        .invoice-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 28px 0 24px;
+            font-size: 0.85rem;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+        .invoice-table th,
+        .invoice-table td {
+            border: 1px solid var(--jaza-silver-edge);
+            padding: 14px 12px;
+            vertical-align: middle;
+        }
+        .invoice-table th {
+            background: var(--jaza-deep-navy);
+            color: white;
+            font-weight: 800;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+        .invoice-table td {
+            background-color: white;
+        }
+
+        .total-section {
+            display: flex;
+            justify-content: flex-end;
+            margin: 20px 0 30px;
+        }
+        .total-box {
+            background: linear-gradient(115deg, #FFF6EC, #FFEFE2);
+            padding: 14px 36px;
+            border-radius: 80px;
+            text-align: right;
+            border: 1px solid rgba(228,106,26,0.35);
+        }
+        .total-box span {
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--jaza-burnt-orange);
+        }
+        .total-label {
+            font-size: 1rem;
+            font-weight: 800;
+            margin-right: 20px;
+            color: #1E2F3E;
+        }
+
+        .warranty-note {
+            background: #FDF7F0;
+            padding: 14px 24px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-align: center;
+            border-left: 6px solid var(--jaza-burnt-orange);
+            margin: 24px 0 20px;
+            border-radius: 20px;
+            color: #1C3A4F;
+        }
+
+        .footer-contact {
+            text-align: center;
+            font-size: 0.7rem;
+            border-top: 2px dashed #CFDDEB;
+            padding-top: 22px;
+            margin-top: 12px;
+            line-height: 1.7;
+            color: #2C3E50;
+        }
+        .shop-address {
+            font-weight: 700;
+            color: var(--jaza-royal-blue);
+            margin-top: 6px;
+        }
+
+        .pdf-download-btn {
+            width: calc(100% - 40px);
+            margin: 0 20px 28px 20px;
+            background: linear-gradient(105deg, var(--jaza-deep-navy), #1C3F62);
+            padding: 16px;
+            font-size: 1rem;
+            font-weight: 800;
+            border-radius: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            border: none;
+            cursor: pointer;
+            color: white;
+            letter-spacing: 0.5px;
+        }
+        .pdf-download-btn:hover {
+            background: linear-gradient(105deg, #0A2A44, var(--jaza-burnt-orange));
+            transform: scale(1.01);
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            visibility: hidden;
+            backdrop-filter: blur(5px);
+        }
+        .loading-overlay.active { visibility: visible; }
+        .spinner {
+            background: var(--jaza-deep-navy);
+            padding: 20px 35px;
+            border-radius: 60px;
+            display: flex;
+            gap: 20px;
+            color: var(--jaza-golden-amber);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner">🔐 Generating secure PDF invoice ...</div>
+    </div>
+
+    <div class="app-container">
+        <!-- CUSTOMER & INVOICE DETAILS -->
+        <div class="form-card">
+            <div class="form-title">⚡ INVOICE CONTROL</div>
+            <div class="row-flex">
+                <div class="field"><label>🧾 INVOICE NUMBER</label><input type="text" id="invoiceNo" value="JAZA-2026-0976"></div>
+                <div class="field"><label>📅 INVOICE DATE</label><input type="text" id="invoiceDate" value="03-06-2026"></div>
+            </div>
+            <div class="row-flex">
+                <div class="field"><label>👤 CUSTOMER (QUOTATION TO)</label><input type="text" id="customerName" value="Mr. SIR ADDRESS - Retail Client"></div>
+                <div class="field"><label>🏠 BILLING ADDRESS</label><input type="text" id="addressField" value="Saddar Suhrab Katri Road, Dubai Hotel Shop 47, Karachi"></div>
+            </div>
+            <div class="row-flex">
+                <div class="field"><label>🏢 COMPANY ADDRESS (FOOTER)</label><input type="text" id="companyAddressField" value="📍 JAZA HQ: Shop 47, Dubai Hotel, Saddar, Karachi - 74400"></div>
+            </div>
+        </div>
+
+        <!-- ITEMS MANAGER TABLE -->
+        <div class="form-card">
+            <div class="form-title">🛒 PRODUCTS & SERVICES</div>
+            <div class="items-manager">
+                <table class="manager-table" id="itemsManageTable">
+                    <thead><tr><th>ITEM DESCRIPTION</th><th>QTY</th><th>RATE (Rs.)</th><th>AMOUNT (Rs.)</th><th>ACTIONS</th></tr></thead>
+                    <tbody id="itemsManageBody"><tr><td colspan="5">Loading...</td></tr>
+                </table>
+            </div>
+            <div class="add-item-area">
+                <div class="field" style="flex:2"><label>Item / Product</label><input type="text" id="newItemName" placeholder="e.g., Hikvision 4MP IP Camera"></div>
+                <div class="field" style="flex:0.7"><label>Qty</label><input type="number" id="newQty" value="1" min="1"></div>
+                <div class="field" style="flex:1"><label>Rate (Rs.)</label><input type="number" id="newRate" value="0" step="100"></div>
+                <button id="addItemBtn">+ ADD ITEM</button>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 16px;">
+                <button id="loadSampleBtn" class="btn-outline" type="button">📋 LOAD SAMPLE INVOICE</button>
+            </div>
+            <div style="font-size: 0.65rem; margin-top: 14px; color: #4A627A;">* Amount = Qty × Rate — real-time updates</div>
+        </div>
+
+        <!-- FOOTER & WARRANTY CUSTOMIZATION -->
+        <div class="form-card">
+            <div class="form-title">🔐 WARRANTY & CONTACT</div>
+            <div class="row-flex">
+                <div class="field"><label>WARRANTY STATEMENT</label><input type="text" id="warrantyText" value="✅ DAHUA & HIKVISION BRAND | 1 YEAR OFFICIAL WARRANTY (CAM+DVR+HDD)"></div>
+            </div>
+            <div class="row-flex">
+                <div class="field"><label>CONTACT LINE</label><input type="text" id="contactText" value="📞 CONTACT ZAHID HUSSAIN #0312-8481699"></div>
+                <div class="field"><label>EMAIL</label><input type="email" id="emailText" value="📧 Jazasystems360@gmail.com"></div>
+            </div>
+        </div>
+
+        <!-- INVOICE PREVIEW — FULLY THEMED TO LOGO COLOR DNA -->
+        <div class="invoice-pdf-container">
+            <div class="invoice-card" id="invoiceCaptureArea">
+                <div class="invoice-header">
+                    <div class="logo-camera">
+                        <!-- Stable logo container with fallback that doesn't break html2canvas -->
+                        <div class="jaza-logo-container" id="logoContainer">
+                            <img src="logo.png" alt="JAZA Security Emblem" class="jaza-logo-img" id="mainLogoImg"
+                                 style="display: block;">
+                            <div id="logoFallback" style="display: none;" class="logo-fallback">
+                                <svg width="70" height="70" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="100" height="100" rx="24" fill="url(#gradShield)" />
+                                    <path d="M50 20 L78 34 L78 60 L50 82 L22 60 L22 34 L50 20Z" fill="#E46A1A" stroke="#F5A623" stroke-width="2.5" />
+                                    <circle cx="50" cy="52" r="12" fill="#FFFFFF" stroke="#0B1E33" stroke-width="2" />
+                                    <circle cx="50" cy="52" r="5" fill="#0B1E33" />
+                                    <path d="M34 36 L66 36" stroke="#F5A623" stroke-width="3" stroke-linecap="round" />
+                                    <defs>
+                                        <linearGradient id="gradShield" x1="0" y1="0" x2="100" y2="100">
+                                            <stop stop-color="#0B1E33" />
+                                            <stop offset="1" stop-color="#1A3A5F" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="brand-text">
+                            <h1>JAZA SECURITY &<br>SURVEILLANCE SYSTEMS</h1>
+                            <p>UNBREAKABLE • INTEGRATION • AUTHORITY</p>
+                            <div class="brand-tagline">CCTV • IP SURVEILLANCE • NETWORKING • ACCESS CONTROL</div>
+                        </div>
+                    </div>
+                    <div class="invoice-meta">
+                        <div class="inv-number" id="previewInvoiceNo">JAZA-2026-0976</div>
+                        <div class="invoice-date">Date: <span id="previewDate">03-06-2026</span></div>
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-block">
+                        <h4>📌 BILL TO (CUSTOMER)</h4>
+                        <p id="previewCustomer">Mr. SIR ADDRESS - Retail Client</p>
+                    </div>
+                    <div class="info-block">
+                        <h4>📍 DELIVERY ADDRESS</h4>
+                        <p class="addr-text" id="previewAddress">Saddar Suhrab Katri Road, Dubai Hotel Shop 47, Karachi</p>
+                    </div>
+                </div>
+
+                <table class="invoice-table" id="previewBillTable">
+                    <thead><tr><th>ITEM DESCRIPTION</th><th>QTY</th><th>RATE (Rs.)</th><th>AMOUNT (Rs.)</th></tr></thead>
+                    <tbody id="previewBillBody"><tr><td colspan="4">— No items added —</td></tr></tbody>
+                </table>
+
+                <div class="total-section">
+                    <div class="total-box">
+                        <span class="total-label">GRAND TOTAL:</span>
+                        <span id="previewTotalAmount">Rs. 0</span>
+                    </div>
+                </div>
+
+                <div class="warranty-note" id="previewWarrantyText">✅ DAHUA & HIKVISION BRAND | 1 YEAR OFFICIAL WARRANTY (CAM+DVR+HDD)</div>
+
+                <div class="footer-contact">
+                    <div id="previewContactLine">📞 CONTACT ZAHID HUSSAIN #0312-8481699</div>
+                    <div id="previewEmailLine">📧 Jazasystems360@gmail.com</div>
+                    <div class="shop-address" id="previewShopAddress">📍 JAZA HQ: Shop 47, Dubai Hotel, Saddar, Karachi - 74400</div>
+                </div>
+            </div>
+            <button class="pdf-download-btn" id="downloadPDFBtn">⬇️ EXPORT PROFESSIONAL PDF (LOGO-THEMED)</button>
+        </div>
+    </div>
+
+    <script>
+        // Stable logo fallback logic (avoids DOM removal during PDF capture)
+        const logoImg = document.getElementById('mainLogoImg');
+        const fallbackDiv = document.getElementById('logoFallback');
+        if (logoImg && fallbackDiv) {
+            logoImg.onerror = function() {
+                logoImg.style.display = 'none';
+                fallbackDiv.style.display = 'flex';
+            };
+            // Also trigger check after a short timeout in case image loads slowly
+            setTimeout(() => {
+                if (logoImg.complete && logoImg.naturalWidth === 0) {
+                    logoImg.style.display = 'none';
+                    fallbackDiv.style.display = 'flex';
+                }
+            }, 200);
+        }
+
+        let itemsArray = [];
+
+        function calcAmount(item) { return item.qty * item.rate; }
+        function formatPKR(amount) { return "Rs. " + amount.toLocaleString('en-PK'); }
+
+        function refreshAll() {
+            renderManageTable();
+            renderInvoicePreview();
+        }
+
+        function renderManageTable() {
+            const tbody = document.getElementById('itemsManageBody');
+            if (!tbody) return;
+            if (itemsArray.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">✨ No items. Add security products or services.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            itemsArray.forEach((item, idx) => {
+                const amount = calcAmount(item);
+                const row = tbody.insertRow();
+                row.insertCell(0).innerText = item.name;
+                row.insertCell(1).innerText = item.qty;
+                row.insertCell(2).innerText = formatPKR(item.rate).replace('Rs. ', '');
+                row.insertCell(3).innerText = formatPKR(amount).replace('Rs. ', '');
+                const actionCell = row.insertCell(4);
+                actionCell.className = 'action-btns';
+                const editBtn = document.createElement('button'); editBtn.innerText = '✏️ Edit'; editBtn.classList.add('edit-btn');
+                const delBtn = document.createElement('button'); delBtn.innerText = '🗑️ Delete'; delBtn.classList.add('delete-btn');
+                editBtn.onclick = () => {
+                    document.getElementById('newItemName').value = item.name;
+                    document.getElementById('newQty').value = item.qty;
+                    document.getElementById('newRate').value = item.rate;
+                    itemsArray.splice(idx, 1);
+                    refreshAll();
+                };
+                delBtn.onclick = () => { itemsArray.splice(idx, 1); refreshAll(); };
+                actionCell.appendChild(editBtn);
+                actionCell.appendChild(delBtn);
+            });
+        }
+
+        function renderInvoicePreview() {
+            const invNo = document.getElementById('invoiceNo').value.trim() || "JAZA-INV";
+            const invDate = document.getElementById('invoiceDate').value.trim() || new Date().toLocaleDateString();
+            const cust = document.getElementById('customerName').value.trim() || "Valued Client";
+            const addr = document.getElementById('addressField').value.trim() || "No address";
+            const warranty = document.getElementById('warrantyText').value.trim() || "1 Year Official Warranty";
+            const contact = document.getElementById('contactText').value.trim() || "📞 +92 312 8481699";
+            const email = document.getElementById('emailText').value.trim() || "info@jazasecurity.com";
+            const companyAddr = document.getElementById('companyAddressField').value.trim() || "JAZA HQ: Shop 47, Dubai Hotel, Karachi";
+
+            document.getElementById('previewInvoiceNo').innerText = invNo;
+            document.getElementById('previewDate').innerText = invDate;
+            document.getElementById('previewCustomer').innerText = cust;
+            document.getElementById('previewAddress').innerText = addr;
+            document.getElementById('previewWarrantyText').innerText = warranty;
+            document.getElementById('previewContactLine').innerText = contact;
+            document.getElementById('previewEmailLine').innerText = email;
+            document.getElementById('previewShopAddress').innerText = companyAddr;
+
+            const tbody = document.getElementById('previewBillBody');
+            if (!tbody) return;
+            if (itemsArray.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">— No items added —</td></tr>';
+                document.getElementById('previewTotalAmount').innerHTML = "Rs. 0";
+                return;
+            }
+            let total = 0;
+            let rowsHtml = '';
+            for (let it of itemsArray) {
+                const amt = calcAmount(it);
+                total += amt;
+                rowsHtml += `<tr>
+                    <td style="text-align:left;">${escapeHtml(it.name)}</td>
+                    <td style="text-align:center;">${it.qty}</td>
+                    <td style="text-align:right;">${formatPKR(it.rate).replace('Rs. ', '')}</td>
+                    <td style="text-align:right;">${formatPKR(amt).replace('Rs. ', '')}</td>
+                </tr>`;
+            }
+            tbody.innerHTML = rowsHtml;
+            document.getElementById('previewTotalAmount').innerHTML = formatPKR(total);
+        }
+
+        function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m])); }
+
+        function addItem() {
+            const name = document.getElementById('newItemName').value.trim();
+            let qty = parseInt(document.getElementById('newQty').value, 10);
+            let rate = parseFloat(document.getElementById('newRate').value);
+            if (!name) { alert("Please enter item / product name"); return; }
+            if (isNaN(qty) || qty <= 0) { alert("Valid quantity required"); return; }
+            if (isNaN(rate) || rate < 0) { alert("Valid rate required"); return; }
+            itemsArray.push({ name, qty, rate });
+            document.getElementById('newItemName').value = '';
+            document.getElementById('newQty').value = '1';
+            document.getElementById('newRate').value = '';
+            refreshAll();
+        }
+
+        function loadSampleInvoice() {
+            itemsArray = [
+                { name: "DAHUA 8CH 4K NVR Kit (4 Cams + 2TB HDD)", qty: 1, rate: 78500 },
+                { name: "HIKVISION 2MP IR Dome Camera", qty: 6, rate: 11200 },
+                { name: "TP-LINK Gigabit PoE Switch 8-Port", qty: 2, rate: 9200 },
+                { name: "Professional Installation & CAT6 Wiring", qty: 1, rate: 18500 }
+            ];
+            document.getElementById('invoiceNo').value = "JAZA-2026-1099";
+            document.getElementById('invoiceDate').value = "03-06-2026";
+            document.getElementById('customerName').value = "Mr. SIR ADDRESS (Al-Mansoor Electronics)";
+            document.getElementById('addressField').value = "Saddar Suhrab Katri Road, Dubai Hotel Shop 47, Karachi";
+            document.getElementById('companyAddressField').value = "📍 JAZA HEAD OFFICE: Shop 47, Dubai Hotel, Saddar, Karachi - 74400";
+            document.getElementById('warrantyText').value = "🔐 GENUINE DAHUA/HIKVISION | 1 YEAR COMPREHENSIVE WARRANTY + 6 MONTHS ON HDD";
+            document.getElementById('contactText').value = "📞 24/7 SUPPORT: ZAHID HUSSAIN #0312-8481699";
+            document.getElementById('emailText').value = "📧 Jazasystems360@gmail.com | support@jaza.security";
+            refreshAll();
+        }
+
+        async function downloadInvoiceAsPDF() {
+            const loading = document.getElementById('loadingOverlay');
+            loading.classList.add('active');
+            try {
+                const element = document.getElementById('invoiceCaptureArea');
+                // Higher scale, stable rendering, avoid cross-origin issues (fallback is inline)
+                const canvas = await html2canvas(element, { 
+                    scale: 3, 
+                    backgroundColor: '#ffffff', 
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: false
+                });
+                const imgData = canvas.toDataURL('image/png');
+                // Ensure jsPDF is loaded correctly
+                if (!window.jspdf || typeof window.jspdf.jsPDF !== 'function') {
+                    throw new Error("jsPDF library not fully loaded");
+                }
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+                const imgWidth = 210; // A4 width in mm
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+                if (imgHeight > 297) {
+                    let heightLeft = imgHeight - 297;
+                    let position = -297;
+                    while (heightLeft > 0) {
+                        pdf.addPage();
+                        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                        heightLeft -= 297;
+                        position -= 297;
+                    }
+                }
+                const invNum = document.getElementById('invoiceNo').value.trim().replace(/[^a-z0-9]/gi, '_') || "JAZA_INVOICE";
+                pdf.save(`JAZA_Invoice_${invNum}.pdf`);
+            } catch (e) {
+                console.error("PDF Error:", e);
+                alert("PDF could not be generated due to a temporary issue. Please refresh and try again. (Error: " + e.message + ")");
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        function bindAutoUpdates() {
+            ['invoiceNo', 'invoiceDate', 'customerName', 'addressField', 'warrantyText', 'contactText', 'emailText', 'companyAddressField'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', () => renderInvoicePreview());
+            });
+        }
+
+        // Initialize
+        loadSampleInvoice();
+        bindAutoUpdates();
+        document.getElementById('addItemBtn').onclick = addItem;
+        document.getElementById('loadSampleBtn').onclick = loadSampleInvoice;
+        document.getElementById('downloadPDFBtn').onclick = downloadInvoiceAsPDF;
+        ['newItemName', 'newQty', 'newRate'].forEach(id => {
+            document.getElementById(id).addEventListener('keypress', e => { if (e.key === 'Enter') addItem(); });
+        });
+    </script>
+</body>
+</html>

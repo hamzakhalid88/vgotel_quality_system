@@ -84,22 +84,23 @@ class ProcessWorker(QObject):
 
     def _process_inspection(self):
         df = self.df.copy()
+        
+        # Date column detect
         date_col = next((c for c in df.columns if 'DATE' in c), None)
         if date_col:
             df['_date'] = df[date_col].apply(self._parse_date)
             df['_date'] = df['_date'].fillna(datetime.now().date())
         else:
             df['_date'] = datetime.now().date()
-            self.progress.emit(0, 1)
-
-        # Safe ship column
+        
+        # Ship column
         if 'SHIP' in df.columns:
             df['_ship'] = df['SHIP'].apply(
                 lambda x: str(int(float(x))) if pd.notna(x) and str(x).replace('.','',1).isdigit() else self._clean_str(x)
             )
         else:
             df['_ship'] = ""
-
+        
         df['_line'] = df['LINE'].apply(self._clean_str)
         df['_model'] = df['MODEL'].apply(self._clean_str)
         df['_category'] = df['FAULTY'].apply(self._clean_str)
@@ -108,32 +109,42 @@ class ProcessWorker(QObject):
             lambda r: f"{r['_category']} - {r['_sub']}" if r['_category'] and r['_sub'] else r['_category'] or r['_sub'],
             axis=1
         )
-        # Get semi and mmi quantities, treat missing columns as 0
-        semi_vals = df['SEMI_TEST'].apply(self._clean_int) if 'SEMI_TEST' in df.columns else 0
-        mmi_vals = df['MMI'].apply(self._clean_int) if 'MMI' in df.columns else 0
-        # Combine into one total quantity per row
-        df['_total_qty'] = semi_vals + mmi_vals
-
-        # Keep only rows where total quantity > 0
-        df = df[df['_total_qty'] > 0]
-        if df.empty:
+        
+        # ========== DETECT STATION COLUMNS ==========
+        station_columns = []
+        for col in df.columns:
+            col_upper = col.upper()
+            if 'SEMI' in col_upper:
+                station_columns.append((col, 'SEMI'))
+            elif col_upper == 'MMI':
+                station_columns.append((col, 'MMI'))
+            elif 'MM2' in col_upper or col_upper == 'MMI_2':
+                station_columns.append((col, 'MMI 2'))
+        
+        # If no stations found (fallback - should not happen if detection worked)
+        if not station_columns:
             return []
-
-        # Create a single record per fault (not separate for semi/mmi)
+        
         records = []
         for _, row in df.iterrows():
-            records.append({
-                'date': row['_date'],
-                'ship': row['_ship'],
-                'line': row['_line'],
-                'model': row['_model'],
-                'fault_name': row['_fault_name'],
-                'source': 'Inspection',   # or keep original station? you can set to 'Semi+MMI'
-                'qty': row['_total_qty'],
-                'inspection_date': row['_date']
-            })
+            fault_name = row['_fault_name']
+            if not fault_name:
+                continue
+            for col, station_name in station_columns:
+                qty = self._clean_int(row[col])
+                if qty > 0:
+                    records.append({
+                        'date': row['_date'],
+                        'ship': row['_ship'],
+                        'line': row['_line'],
+                        'model': row['_model'],
+                        'fault_name': fault_name,
+                        'source': station_name,
+                        'qty': qty,
+                        'inspection_date': row['_date']
+                    })
         return records
-
+        
     def _process_rework(self):
         df = self.df.copy()
         df['date'] = df['RESOLUTION_DATE'].apply(self._parse_date).fillna(datetime.now().date())
@@ -575,16 +586,30 @@ class ReworkWidget(QWidget):
             df = pd.read_excel(self.current_excel_path, sheet_name=sheet_name)
             df.columns = [str(col).strip().upper().replace(' ', '_') for col in df.columns]
 
-            # Detect sheet type
-            if {'PCBA', 'MATERIAL', 'FIXING', 'SOLDERING'}.issubset(df.columns):
+            # Detect sheet type using flexible rules (ORDER MATTERS)
+            cols_upper_set = set(df.columns)
+            
+            # 1. Rework root cause sheet
+            if {'PCBA', 'MATERIAL', 'FIXING', 'SOLDERING'}.issubset(cols_upper_set):
                 sheet_type = 'rework_root_cause'
-            elif {'LINE', 'MODEL', 'FAULTY', 'SEMI_TEST', 'MMI'}.issubset(df.columns):
-                sheet_type = 'inspection'
-            elif {'LINE', 'MODEL', 'FAULT_NAME', 'SOURCE_STATION', 'RESOLVED_QTY', 'RESOLUTION_DATE'}.issubset(df.columns):
+            # 2. Rework completed sheet
+            elif {'LINE', 'MODEL', 'FAULT_NAME', 'SOURCE_STATION', 'RESOLVED_QTY', 'RESOLUTION_DATE'}.issubset(cols_upper_set):
                 sheet_type = 'rework'
-            elif {'DATE', 'LINE', 'MODEL', 'FAULTY', 'TOTAL'}.issubset(df.columns):
-                sheet_type = 'appearance'
-            elif {'LINE', 'MODEL', 'FAULT_NAME', 'APPEARANCE'}.issubset(df.columns):
+            # 3. Inspection sheet: must have LINE, MODEL, FAULTY, and at least one station column (SEMI/MMI/MM2)
+            elif {'LINE', 'MODEL', 'FAULTY'}.issubset(cols_upper_set):
+                # Look for any column that contains 'SEMI' or 'MMI' or 'MM2'
+                has_station = any('SEMI' in c or 'MMI' in c or 'MM2' in c for c in df.columns)
+                if has_station:
+                    sheet_type = 'inspection'
+                else:
+                    # 4. Appearance sheet (has DATE and TOTAL)
+                    if {'DATE', 'TOTAL'}.issubset(cols_upper_set):
+                        sheet_type = 'appearance'
+                    else:
+                        # Fallback - but shouldn't happen
+                        sheet_type = 'appearance'
+            # 5. Appearance without FAULTY? Actually appearance always has FAULTY and TOTAL, but just in case
+            elif {'DATE', 'LINE', 'MODEL', 'FAULTY', 'TOTAL'}.issubset(cols_upper_set):
                 sheet_type = 'appearance'
             else:
                 CustomMessageBox.show_warning(self, "Invalid Format", f"Sheet '{sheet_name}' does not match known formats.")
@@ -611,7 +636,7 @@ class ReworkWidget(QWidget):
         except Exception as e:
             CustomMessageBox.show_error(self, "Error", str(e))
             self.clear_table()
-
+            
     def update_progress(self, current, total):
         if self.progress:
             self.progress.setValue(int(current / total * 100))

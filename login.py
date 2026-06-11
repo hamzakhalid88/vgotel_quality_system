@@ -10,7 +10,24 @@ class LoginDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.db = Database()
+        self.user = None   # will store authenticated user
         self.setup_ui()
+        self.initialize_permissions()
+        
+    def initialize_permissions(self):
+        try:
+            self.db.initialize_default_pages()
+            users = self.db.get_all_users()
+            initialized_count = 0
+            for user in users:
+                perms = self.db.get_user_permissions(user['id'])
+                if not perms:
+                    self.db.apply_role_permissions(user['id'], user.get('role', 'viewer'))
+                    initialized_count += 1
+            if initialized_count > 0:
+                print(f"[PERMISSIONS] Applied default role permissions to {initialized_count} user(s)")
+        except Exception as e:
+            print(f"[PERMISSIONS] Initialization warning: {e}")
         
     def setup_ui(self):
         self.setWindowTitle("Login - Quality Control System")
@@ -18,12 +35,10 @@ class LoginDialog(QDialog):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
         self.setAttribute(Qt.WA_TranslucentBackground)
         
-        # Main layout
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(main_layout)
         
-        # Main frame
         main_frame = QFrame()
         main_frame.setObjectName("login_frame")
         main_frame.setStyleSheet("""
@@ -34,13 +49,12 @@ class LoginDialog(QDialog):
             }
         """)
         
-        # Frame layout
         frame_layout = QVBoxLayout()
         frame_layout.setSpacing(0)
         frame_layout.setContentsMargins(0, 0, 0, 0)
         main_frame.setLayout(frame_layout)
         
-        # Header section with blue bar
+        # Header
         header_widget = QFrame()
         header_widget.setStyleSheet("""
             QFrame {
@@ -52,29 +66,17 @@ class LoginDialog(QDialog):
         header_widget.setFixedHeight(80)
         header_layout = QVBoxLayout()
         header_widget.setLayout(header_layout)
-        
         title = QLabel("QUALITY CONTROL SYSTEM")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-size: 18px;
-            font-weight: bold;
-            color: white;
-            font-family: 'Segoe UI';
-        """)
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: white; font-family: 'Segoe UI';")
         header_layout.addWidget(title)
-        
         subtitle = QLabel("Quality Management Professional Suite")
         subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setStyleSheet("""
-            font-size: 11px;
-            color: #B3D4FC;
-            font-family: 'Segoe UI';
-        """)
+        subtitle.setStyleSheet("font-size: 11px; color: #B3D4FC; font-family: 'Segoe UI';")
         header_layout.addWidget(subtitle)
-        
         frame_layout.addWidget(header_widget)
         
-        # Content section
+        # Content
         content_widget = QFrame()
         content_widget.setStyleSheet("background-color: #1E1E1E;")
         content_layout = QVBoxLayout()
@@ -82,42 +84,22 @@ class LoginDialog(QDialog):
         content_layout.setContentsMargins(50, 40, 50, 40)
         content_widget.setLayout(content_layout)
         
-        # Welcome text
         welcome = QLabel("Welcome Back")
         welcome.setAlignment(Qt.AlignCenter)
-        welcome.setStyleSheet("""
-            font-size: 24px;
-            font-weight: bold;
-            color: #FFFFFF;
-            font-family: 'Segoe UI';
-        """)
+        welcome.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF; font-family: 'Segoe UI';")
         content_layout.addWidget(welcome)
-        
-        # Instruction
         instruction = QLabel("Please enter your credentials to continue")
         instruction.setAlignment(Qt.AlignCenter)
-        instruction.setStyleSheet("""
-            font-size: 12px;
-            color: #888888;
-            margin-bottom: 10px;
-        """)
+        instruction.setStyleSheet("font-size: 12px; color: #888888; margin-bottom: 10px;")
         content_layout.addWidget(instruction)
-        
         content_layout.addSpacing(10)
         
-        # Username field container
+        # Username
         username_container = QVBoxLayout()
         username_container.setSpacing(8)
-        
         username_label = QLabel("Username")
-        username_label.setStyleSheet("""
-            color: #0D47A1;
-            font-size: 12px;
-            font-weight: bold;
-            letter-spacing: 1px;
-        """)
+        username_label.setStyleSheet("color: #0D47A1; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
         username_container.addWidget(username_label)
-        
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("Enter your username")
         self.username_input.setMinimumHeight(42)
@@ -137,19 +119,12 @@ class LoginDialog(QDialog):
         username_container.addWidget(self.username_input)
         content_layout.addLayout(username_container)
         
-        # Password field container
+        # Password
         password_container = QVBoxLayout()
         password_container.setSpacing(8)
-        
         password_label = QLabel("Password")
-        password_label.setStyleSheet("""
-            color: #0D47A1;
-            font-size: 12px;
-            font-weight: bold;
-            letter-spacing: 1px;
-        """)
+        password_label.setStyleSheet("color: #0D47A1; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
         password_container.addWidget(password_label)
-        
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Enter your password")
         self.password_input.setEchoMode(QLineEdit.Password)
@@ -169,13 +144,11 @@ class LoginDialog(QDialog):
         """)
         password_container.addWidget(self.password_input)
         content_layout.addLayout(password_container)
-        
         content_layout.addSpacing(20)
         
-        # Buttons container
+        # Buttons
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(15)
-        
         self.login_btn = QPushButton("LOGIN")
         self.login_btn.setCursor(Qt.PointingHandCursor)
         self.login_btn.setMinimumHeight(42)
@@ -196,7 +169,6 @@ class LoginDialog(QDialog):
             }
         """)
         self.login_btn.clicked.connect(self.authenticate)
-        
         cancel_btn = QPushButton("CANCEL")
         cancel_btn.setCursor(Qt.PointingHandCursor)
         cancel_btn.setMinimumHeight(42)
@@ -215,14 +187,12 @@ class LoginDialog(QDialog):
             }
         """)
         cancel_btn.clicked.connect(self.reject)
-        
         buttons_layout.addWidget(self.login_btn)
         buttons_layout.addWidget(cancel_btn)
         content_layout.addLayout(buttons_layout)
-        
         frame_layout.addWidget(content_widget)
         
-        # Footer section
+        # Footer
         footer_widget = QFrame()
         footer_widget.setStyleSheet("""
             QFrame {
@@ -234,20 +204,15 @@ class LoginDialog(QDialog):
         footer_widget.setFixedHeight(50)
         footer_layout = QHBoxLayout()
         footer_widget.setLayout(footer_layout)
-        
         version = QLabel("Version 2.0")
         version.setStyleSheet("color: #666666; font-size: 10px;")
         footer_layout.addWidget(version)
-        
         footer_layout.addStretch()
-        
         company = QLabel("© Professional Solutions")
         company.setStyleSheet("color: #666666; font-size: 10px;")
         footer_layout.addWidget(company)
-        
         frame_layout.addWidget(footer_widget)
         
-        # Add to main layout
         main_layout.addWidget(main_frame)
         
         # Close button (X)
@@ -265,43 +230,39 @@ class LoginDialog(QDialog):
                 color: #F44336;
             }
         """)
-        close_btn.clicked.connect(self.close)
+        close_btn.clicked.connect(self.reject)   # Reject on X
         close_btn.setParent(self)
         close_btn.resize(35, 35)
         close_btn.move(self.width() - 45, 12)
         
-        # Set focus
         self.username_input.setFocus()
-        
-        # Enter key navigation
         self.username_input.returnPressed.connect(self.password_input.setFocus)
         self.password_input.returnPressed.connect(self.authenticate)
     
     def authenticate(self):
         username = self.username_input.text().strip()
         password = self.password_input.text()
-        
         if not username or not password:
             QMessageBox.warning(self, "Warning", "Please enter username and password")
             return
-        
         try:
             user = self.db.authenticate_user(username, password)
-            
             if user:
                 self.db.update_last_login(user['id'])
+                self.user = user
                 self.login_successful.emit(user)
-                
-                from main_window import MainWindow
-                self.main_window = MainWindow(self.db, user)
-                self.main_window.show()
-                self.close()
+                self.accept()          # <-- key: accept, not close
             else:
                 QMessageBox.critical(self, "Error", "Invalid username or password")
                 self.password_input.clear()
                 self.password_input.setFocus()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Login error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    
+    def get_user(self):
+        return self.user
     
     def resizeEvent(self, event):
         for btn in self.findChildren(QPushButton):

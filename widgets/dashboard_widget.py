@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt5.QtCore import Qt, QTimer, QDateTime
 from PyQt5.QtGui import QFont, QColor
 from database import Database
+import re
 
 
 class ModernButton(QPushButton):
@@ -113,7 +114,7 @@ class DashboardWidget(QWidget):
         self.refresh_data()
         self.timer = QTimer()
         self.timer.timeout.connect(self.refresh_data)
-        self.timer.start(30000)
+        self.timer.start(30000)  # Refresh every 30 seconds
         
     def setup_ui(self):
         main_layout = QVBoxLayout()
@@ -308,51 +309,61 @@ class DashboardWidget(QWidget):
         elif hour < 17: return "Afternoon"
         else: return "Evening"
     
-    # ------------------- DATA FETCHING (REAL FROM DATABASE) -------------------
+    # ------------------- UPGRADED DATA FETCHING (DIRECT SUMS) -------------------
     def get_fault_repair_data(self):
         """
-        Fetch real data based on latest rework date.
-        - semi_faults = sum defects from inspections (Semi Test) on that date
-        - mmi_faults = sum defects from inspections (MMI Test) on that date
-        - repairs = sum total_qty from rework_root_cause on that date
+        Fetch real data using direct sums from inspections and rework_root_cause.
+        - semi_faults = SUM(rejected_quantity) WHERE inspection_type = 'SEMI'
+        - mmi_faults = SUM(rejected_quantity) WHERE inspection_type IN ('MMI', 'MMI 2')
+        - repairs = SUM(total_qty) FROM rework_root_cause
+        Uses the latest date available in either inspections or rework_root_cause.
         """
         try:
-            # Get latest date from rework_root_cause
-            max_date_query = "SELECT MAX(record_date) as max_date FROM rework_root_cause"
-            max_date_row = self.db.execute_query(max_date_query, fetch_one=True)
-            target_date = max_date_row['max_date'] if max_date_row and max_date_row['max_date'] else None
+            # First, determine the latest date from either inspections or rework
+            date_query = """
+                SELECT MAX(latest) as latest_date FROM (
+                    SELECT MAX(CAST(inspection_date AS DATE)) as latest FROM inspections
+                    UNION
+                    SELECT MAX(record_date) as latest FROM rework_root_cause
+                ) as dates
+            """
+            date_row = self.db.execute_query(date_query, fetch_one=True)
+            target_date = date_row['latest_date'] if date_row and date_row['latest_date'] else None
             
             if not target_date:
-                print("No rework data found. Using dummy data.")
+                print("No data found in inspections or rework. Using dummy.")
                 return self._get_dummy_data()
             
             date_str = target_date.strftime('%Y-%m-%d')
+            print(f"[Dashboard] Using date: {date_str}")
             
-            # Semi faults
-            semi_rows = self.db.execute_query("""
+            # Semi faults (inspection_type = 'SEMI')
+            semi_data = self.db.execute_query("""
                 SELECT 
                     ISNULL(line, 'Unknown') as line,
                     ISNULL(remarks, '') as remarks,
-                    ISNULL(defects, '') as defects
+                    SUM(ISNULL(rejected_quantity, 0)) as total_faults
                 FROM inspections
-                WHERE inspection_type = 'Semi Test'
+                WHERE inspection_type = 'SEMI'
                   AND line IS NOT NULL AND line != ''
                   AND CAST(inspection_date AS DATE) = ?
+                GROUP BY line, remarks
             """, (date_str,), fetch_all=True) or []
             
-            # MMI faults
-            mmi_rows = self.db.execute_query("""
+            # MMI faults (inspection_type IN ('MMI', 'MMI 2'))
+            mmi_data = self.db.execute_query("""
                 SELECT 
                     ISNULL(line, 'Unknown') as line,
                     ISNULL(remarks, '') as remarks,
-                    ISNULL(defects, '') as defects
+                    SUM(ISNULL(rejected_quantity, 0)) as total_faults
                 FROM inspections
-                WHERE inspection_type = 'MMI Test'
+                WHERE inspection_type IN ('MMI', 'MMI 2')
                   AND line IS NOT NULL AND line != ''
                   AND CAST(inspection_date AS DATE) = ?
+                GROUP BY line, remarks
             """, (date_str,), fetch_all=True) or []
             
-            # Repairs
+            # Repairs from rework_root_cause
             repairs_data = self.db.execute_query("""
                 SELECT 
                     ISNULL(line, 'Unknown') as line,
@@ -365,62 +376,53 @@ class DashboardWidget(QWidget):
                 GROUP BY line, model
             """, (date_str,), fetch_all=True) or []
             
-            def parse_defects_sum(defects_text, remarks_text):
-                total = 0
-                model = "Unknown"
-                if remarks_text:
-                    import re
-                    match = re.search(r'Model:\s*([^|\n]+)', remarks_text)
-                    if match:
-                        model = match.group(1).strip()
-                if defects_text:
-                    import re
-                    pattern = r':\s*(\d+)\s*pcs'
-                    matches = re.findall(pattern, defects_text)
-                    total = sum(int(m) for m in matches)
-                return total, model
+            # Helper to extract model from remarks (format: "Imported from Excel... | Model: XYZ | ...")
+            def extract_model_from_remarks(remarks):
+                if not remarks:
+                    return "Unknown"
+                match = re.search(r'Model:\s*([^|\n]+)', remarks)
+                if match:
+                    return match.group(1).strip()
+                return "Unknown"
             
+            # Aggregate semi by (model, line)
             semi_agg = {}
-            for row in semi_rows:
+            for row in semi_data:
                 line = row['line']
-                defects = row['defects'] or ""
                 remarks = row['remarks'] or ""
-                qty, model = parse_defects_sum(defects, remarks)
+                model = extract_model_from_remarks(remarks)
                 key = (model, line)
-                semi_agg[key] = semi_agg.get(key, 0) + qty
+                semi_agg[key] = semi_agg.get(key, 0) + row['total_faults']
             
+            # Aggregate mmi
             mmi_agg = {}
-            for row in mmi_rows:
+            for row in mmi_data:
                 line = row['line']
-                defects = row['defects'] or ""
                 remarks = row['remarks'] or ""
-                qty, model = parse_defects_sum(defects, remarks)
+                model = extract_model_from_remarks(remarks)
                 key = (model, line)
-                mmi_agg[key] = mmi_agg.get(key, 0) + qty
+                mmi_agg[key] = mmi_agg.get(key, 0) + row['total_faults']
             
+            # Combine
             combined = {}
             for (model, line), semi_qty in semi_agg.items():
-                key = (model, line)
-                combined[key] = {
+                combined[(model, line)] = {
                     'model': model,
                     'line': line,
                     'semi_faults': semi_qty,
                     'mmi_faults': 0,
-                    'repairs': 0,
-                    'unresolved': 0
+                    'repairs': 0
                 }
             for (model, line), mmi_qty in mmi_agg.items():
-                key = (model, line)
-                if key in combined:
-                    combined[key]['mmi_faults'] = mmi_qty
+                if (model, line) in combined:
+                    combined[(model, line)]['mmi_faults'] = mmi_qty
                 else:
-                    combined[key] = {
+                    combined[(model, line)] = {
                         'model': model,
                         'line': line,
                         'semi_faults': 0,
                         'mmi_faults': mmi_qty,
-                        'repairs': 0,
-                        'unresolved': 0
+                        'repairs': 0
                     }
             for row in repairs_data:
                 model = row['model']
@@ -434,8 +436,7 @@ class DashboardWidget(QWidget):
                         'line': line,
                         'semi_faults': 0,
                         'mmi_faults': 0,
-                        'repairs': row['repairs'],
-                        'unresolved': 0
+                        'repairs': row['repairs']
                     }
             
             result = []
@@ -443,18 +444,25 @@ class DashboardWidget(QWidget):
                 total_faults = val['semi_faults'] + val['mmi_faults']
                 repairs = val['repairs']
                 unresolved = total_faults - repairs
-                val['unresolved'] = unresolved
-                result.append(val)
+                result.append({
+                    'model': val['model'],
+                    'line': val['line'],
+                    'semi_faults': val['semi_faults'],
+                    'mmi_faults': val['mmi_faults'],
+                    'total_faults': total_faults,
+                    'repairs': repairs,
+                    'unresolved': unresolved
+                })
             
             if result:
-                print(f"✅ Dashboard: Loaded {len(result)} model-line entries for date {date_str}")
+                print(f"✅ Dashboard: Loaded {len(result)} entries for {date_str}")
                 return result
             else:
-                print(f"⚠️ No data found for date {date_str}. Using dummy data.")
+                print(f"⚠️ No data for {date_str}, using dummy")
                 return self._get_dummy_data()
                 
         except Exception as e:
-            print(f"Error fetching real data: {e}")
+            print(f"Error in get_fault_repair_data: {e}")
             import traceback
             traceback.print_exc()
             return self._get_dummy_data()
@@ -462,7 +470,7 @@ class DashboardWidget(QWidget):
     def _get_dummy_data(self):
         """Fallback dummy data when no real data available"""
         return [
-            {"model": "NEW 16 PRO", "line": "202", "semi_faults": 0, "mmi_faults": 0, "repairs": 0, "unresolved": 0},
+            {"model": "NEW 16 PRO", "line": "202", "semi_faults": 0, "mmi_faults": 0, "repairs": 0, "unresolved": 0, "total_faults": 0},
         ]
     
     # ------------------- UI UPDATE METHODS -------------------
