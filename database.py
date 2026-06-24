@@ -172,6 +172,14 @@ class Database:
                              ('defect_types','NVARCHAR(500)'),('attachments','NVARCHAR(1000)'),('reviewed_by','INT'),
                              ('reviewed_at','DATETIME'),('updated_at','DATETIME'),('line','NVARCHAR(50)'),('floor','NVARCHAR(50)')]:
                 self._add_column_safe(cursor, 'inspections', col, defn)
+            
+            # ========== FIX: Explicitly add ship and model columns to inspections ==========
+            self._add_column_safe(cursor, 'inspections', 'ship', 'NVARCHAR(50)')
+            self._add_column_safe(cursor, 'inspections', 'model', 'NVARCHAR(100)')
+            self._add_column_safe(cursor, 'inspections', 'phone_type', 'NVARCHAR(20)')
+            self._add_column_safe(cursor, 'fault_categories', 'phone_type', "NVARCHAR(20) DEFAULT 'Both'")
+            
+
             cursor.execute("IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='FK_inspections_products' AND xtype='F') ALTER TABLE inspections ADD CONSTRAINT FK_inspections_products FOREIGN KEY (product_id) REFERENCES products(id)")
             cursor.execute("IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='FK_inspections_users' AND xtype='F') ALTER TABLE inspections ADD CONSTRAINT FK_inspections_users FOREIGN KEY (inspector_id) REFERENCES users(id)")
 
@@ -207,6 +215,17 @@ class Database:
                 display_order INT DEFAULT 0, is_active BIT DEFAULT 1, created_at DATETIME DEFAULT GETDATE(),
                 created_by INT, updated_at DATETIME, FOREIGN KEY (category_id) REFERENCES fault_categories(id) ON DELETE CASCADE,
                 CONSTRAINT CHK_FaultSeverity CHECK (severity IN ('Critical','Major','Minor')))""")
+            
+             # ========== یہ نیا کوڈ یہاں ڈالیں (REWORK TABLES سے پہلے) ==========
+            cursor.execute("""
+                IF EXISTS (SELECT * FROM sysobjects WHERE name='CHK_FaultStationType' AND xtype='C')
+                    ALTER TABLE fault_categories DROP CONSTRAINT CHK_FaultStationType
+            """)
+            cursor.execute("""
+                ALTER TABLE fault_categories 
+                ADD CONSTRAINT CHK_FaultStationType 
+                CHECK (station_type IN ('Semi Test','MMI Test','Appearance Test','Final Test','Rework'))
+            """)
 
             # --- REWORK TABLES ---
             cursor.execute("""IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='rework_tasks' AND xtype='U')
@@ -251,8 +270,7 @@ class Database:
                 solding NVARCHAR(255), created_at DATETIME DEFAULT GETDATE(),
                 FOREIGN KEY (inspection_id) REFERENCES inspections(id) ON DELETE CASCADE)""")
 
-            # ========== PERMISSION SYSTEM TABLES (NEW) ==========
-            # Pages table
+            # ========== PERMISSION SYSTEM TABLES ==========
             cursor.execute("""IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pages' AND xtype='U')
                 CREATE TABLE pages (
                     id INT IDENTITY PRIMARY KEY,
@@ -265,7 +283,6 @@ class Database:
                     created_at DATETIME DEFAULT GETDATE()
                 )""")
 
-            # Page functions table
             cursor.execute("""IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='page_functions' AND xtype='U')
                 CREATE TABLE page_functions (
                     id INT IDENTITY PRIMARY KEY,
@@ -278,7 +295,6 @@ class Database:
                     created_at DATETIME DEFAULT GETDATE()
                 )""")
 
-            # User permissions table
             cursor.execute("""IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='user_permissions' AND xtype='U')
                 CREATE TABLE user_permissions (
                     id INT IDENTITY PRIMARY KEY,
@@ -291,7 +307,6 @@ class Database:
                     UNIQUE(user_id, page_id, function_id)
                 )""")
 
-            # Role permissions template table
             cursor.execute("""IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='role_permissions' AND xtype='U')
                 CREATE TABLE role_permissions (
                     id INT IDENTITY PRIMARY KEY,
@@ -302,7 +317,7 @@ class Database:
                     UNIQUE(role, page_id, function_id)
                 )""")
 
-            # --- INDEXES (OPTIMIZED) ---
+            # --- INDEXES ---
             idxs = ["idx_users_username ON users(username)", "idx_users_role ON users(role)",
                     "idx_users_is_active ON users(is_active)",
                     "idx_products_code ON products(product_code)", "idx_products_status ON products(status)",
@@ -321,7 +336,6 @@ class Database:
                     "idx_rework_history_task ON rework_history(task_id)",
                     "idx_rework_details_inspection ON rework_details(inspection_id)",
                     "idx_rework_resolution_mapping_category ON rework_resolution_mapping(fault_category)",
-                    # NEW: Permission indexes
                     "idx_user_permissions_user ON user_permissions(user_id)",
                     "idx_user_permissions_page ON user_permissions(page_id)",
                     "idx_page_functions_page ON page_functions(page_id)",
@@ -384,8 +398,16 @@ class Database:
             rows = self.execute_query("UPDATE users SET is_active=0, updated_at=GETDATE() WHERE id=?", (user_id,))
             return rows > 0
         else:
-            rows = self.execute_query("DELETE FROM users WHERE id=?", (user_id,))
-            return rows > 0
+            with self.get_connection() as conn:
+                c = conn.cursor()
+                c.execute("DELETE FROM user_permissions WHERE user_id = ?", (user_id,))
+                c.execute("DELETE FROM notifications WHERE user_id = ?", (user_id,))
+                c.execute("DELETE FROM defects WHERE inspection_id IN (SELECT id FROM inspections WHERE inspector_id = ?)", (user_id,))
+                c.execute("DELETE FROM rework_tasks WHERE inspection_id IN (SELECT id FROM inspections WHERE inspector_id = ?)", (user_id,))
+                c.execute("DELETE FROM inspections WHERE inspector_id = ?", (user_id,))
+                c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+                conn.commit()
+                return c.rowcount > 0
 
     @handle_db_errors
     def update_user(self, user_id: int, user_data: Dict) -> bool:
@@ -435,22 +457,14 @@ class Database:
         email = user_data.get('email', '').strip() if user_data.get('email') else None
         created_by = user_data.get('created_by', 1)
 
-        # 1. Check for duplicate username
         if self.get_user_by_username(username):
             raise DatabaseError(f"Username '{username}' already exists.")
-
-        # 2. Check for duplicate email (if provided)
         if email and self.get_user_by_email(email):
             raise DatabaseError(f"Email '{email}' already exists.")
-
-        # 3. Verify created_by user exists
         if not self.get_user_by_id(created_by):
             raise DatabaseError(f"Invalid created_by user ID: {created_by}")
 
-        # 4. Hash password
         ph = self._hash_password(user_data['password'])
-
-        # 5. Insert the user
         insert_sql = """
             INSERT INTO users 
             (username, password_hash, full_name, email, phone, role, department, created_by)
@@ -471,27 +485,21 @@ class Database:
             except pyodbc.Error as e:
                 raise DatabaseError(f"SQL error: {e}")
 
-            # Check that exactly one row was inserted
             if cursor.rowcount != 1:
                 raise DatabaseError("Insert affected 0 rows. Possible constraint violation.")
 
-            # Retrieve the new user ID using the unique username (most reliable)
             cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
             row = cursor.fetchone()
             if not row:
                 raise DatabaseError("User was inserted but cannot be found by username.")
             user_id = int(row[0])
 
-        # 6. Apply default role permissions (after commit)
         self.apply_role_permissions(user_id, user_data.get('role', 'viewer'))
         return user_id
 
-
-    # ========== PERMISSION SYSTEM API (NEW) ==========
-
+    # ========== PERMISSION SYSTEM API ==========
     @handle_db_errors
     def initialize_default_pages(self):
-        """Insert default pages and functions if not exist"""
         with self.get_connection() as conn:
             c = conn.cursor()
             
@@ -499,7 +507,6 @@ class Database:
             if c.fetchone()[0] > 0:
                 return
             
-            # Insert Pages
             pages = [
                 (1, 'Dashboard', 'dashboard', '📊', 'Main dashboard with statistics', 1),
                 (2, 'User Management', 'users', '👥', 'Manage system users', 2),
@@ -517,7 +524,6 @@ class Database:
                 c.execute("INSERT INTO pages (id, name, route, icon, description, display_order) VALUES (?,?,?,?,?,?)", p)
                 c.execute("SET IDENTITY_INSERT pages OFF")
             
-            # Insert Functions
             functions = [
                 (1, 'View', 'dashboard_view', 'Access dashboard', 1),
                 (2, 'View', 'users_view', 'View users list', 1),
@@ -552,7 +558,6 @@ class Database:
             for f in functions:
                 c.execute("INSERT INTO page_functions (page_id, name, code, description, display_order) VALUES (?,?,?,?,?)", f)
             
-            # Insert role permissions
             roles = ['admin', 'manager', 'inspector', 'viewer']
             c.execute("SELECT id, code FROM page_functions")
             all_funcs = c.fetchall()
@@ -708,16 +713,18 @@ class Database:
 
     @handle_db_errors
     def add_product(self, data: Dict) -> Optional[int]:
-        q = """INSERT INTO products (product_code, product_name, category, batch_number, production_date, expiry_date,
-             specification, quantity, min_quantity, location, supplier, unit, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) SELECT SCOPE_IDENTITY()"""
-        params = (data['product_code'], data['product_name'], data.get('category'), data['batch_number'], data['production_date'],
-                  data.get('expiry_date'), data.get('specification'), data.get('quantity',0), data.get('min_quantity',0),
-                  data.get('location'), data.get('supplier'), data.get('unit','pcs'), data.get('created_by',1))
         with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(q, params)
-            return cursor.fetchone()[0]
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO products (product_code, product_name, category, batch_number, production_date, expiry_date,
+                                    specification, quantity, min_quantity, location, supplier, unit, created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (data['product_code'], data['product_name'], data.get('category'), data['batch_number'],
+                data['production_date'], data.get('expiry_date'), data.get('specification'),
+                data.get('quantity',0), data.get('min_quantity',0), data.get('location'), data.get('supplier'),
+                data.get('unit','pcs'), data.get('created_by',1)))
+            c.execute("SELECT SCOPE_IDENTITY()")
+            return c.fetchone()[0]
 
     @handle_db_errors
     def update_product(self, pid: int, data: Dict) -> bool:
@@ -837,11 +844,18 @@ class Database:
 
     # ========== FAULT MANAGEMENT API ==========
     @handle_db_errors
-    def get_fault_categories(self, station: str) -> List[Dict]:
-        if station in self._fault_cache:
-            return self._fault_cache[station]
-        data = self.execute_query("SELECT id, category_name, display_order, icon, description, is_active FROM fault_categories WHERE station_type=? AND is_active=1 ORDER BY display_order", (station,), fetch_all=True)
-        self._fault_cache[station] = data
+    def get_fault_categories(self, station: str, phone_type: str = None) -> List[Dict]:
+        cache_key = f"{station}_{phone_type}" if phone_type else station
+        if cache_key in self._fault_cache:
+            return self._fault_cache[cache_key]
+        query = "SELECT id, category_name, display_order, icon, description, is_active FROM fault_categories WHERE station_type=? AND is_active=1"
+        params = [station]
+        if phone_type:
+            query += " AND phone_type = ?"
+            params.append(phone_type)
+        query += " ORDER BY display_order"
+        data = self.execute_query(query, tuple(params), fetch_all=True)
+        self._fault_cache[cache_key] = data
         return data
 
     @handle_db_errors
@@ -876,32 +890,153 @@ class Database:
                     'severity': row['severity']
                 })
         return result
+    
+    @handle_db_errors
+    def save_rework_entries(self, rework_data):
+        if isinstance(rework_data, dict):
+            rework_data = [rework_data]
+        if not rework_data:
+            return True
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            for entry in rework_data:
+                sql = """
+                    INSERT INTO rework_root_cause 
+                    (ship_no, record_date, line, model, fault_category, fault_subcategory,
+                     pcba_qty, material_qty, fixing_qty, soldering_qty, total_qty, remarks, imported_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())
+                """
+                cursor.execute(sql, (
+                    entry.get('ship_no'),
+                    entry.get('record_date'),
+                    entry.get('line'),
+                    entry.get('model'),
+                    entry.get('fault_category'),
+                    entry.get('fault_subcategory'),
+                    entry.get('pcba_qty', 0),
+                    entry.get('material_qty', 0),
+                    entry.get('fixing_qty', 0),
+                    entry.get('soldering_qty', 0),
+                    entry.get('total_qty', 0),
+                    entry.get('remarks')
+                ))
+            conn.commit()
+        return True
+
+    # ======================================================================
+    # FIXED METHOD: save_rework_root_cause_from_inspection
+    # Now fetches ship/model directly from inspection and splits fault name
+    # ======================================================================
+    @handle_db_errors
+    def save_rework_root_cause_from_inspection(self, inspection_id: int, rework_entries: List[tuple]) -> bool:
+        """
+        rework_entries: list of tuples (fault_name, pcb_qty, material_qty, fixing_qty, solding_qty)
+        Upsert into rework_root_cause table based on (record_date, line, model, fault_category, fault_subcategory)
+        Now matches the import logic exactly.
+        """
+        if not rework_entries:
+            return True
+
+        # 1. Get inspection details (now includes ship and model columns)
+        insp = self.get_inspection_by_id(inspection_id)
+        if not insp:
+            raise DatabaseError(f"Inspection with id {inspection_id} not found.")
+
+        record_date = insp.get('inspection_date')
+        if isinstance(record_date, datetime):
+            record_date = record_date.date()
+        line = insp.get('line', '')
+        model = insp.get('model', '')   # Directly from inspections table
+        ship = insp.get('ship', '')     # Directly from inspections table
+
+        # 2. Loop through entries and upsert
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            for fault_name, pcb_qty, material_qty, fixing_qty, solding_qty in rework_entries:
+                # Convert to integers
+                pcb = int(pcb_qty) if pcb_qty else 0
+                mat = int(material_qty) if material_qty else 0
+                fix = int(fixing_qty) if fixing_qty else 0
+                sold = int(solding_qty) if solding_qty else 0
+                total = pcb + mat + fix + sold
+                if total == 0:
+                    continue
+
+                # Split fault_name into category and subcategory (like import)
+                if ' - ' in fault_name:
+                    cat, sub = fault_name.split(' - ', 1)
+                else:
+                    cat = fault_name
+                    sub = ''
+
+                # Check existence on unique key (same as import)
+                cursor.execute("""
+                    SELECT id FROM rework_root_cause
+                    WHERE record_date = ? AND line = ? AND model = ? 
+                      AND fault_category = ? AND fault_subcategory = ?
+                """, (record_date, line, model, cat.strip(), sub.strip()))
+                existing = cursor.fetchone()
+                if existing:
+                    # Update existing
+                    cursor.execute("""
+                        UPDATE rework_root_cause
+                        SET ship_no = ?, pcba_qty = ?, material_qty = ?, fixing_qty = ?, soldering_qty = ?,
+                            total_qty = ?, remarks = ?, imported_at = GETDATE()
+                        WHERE id = ?
+                    """, (ship, pcb, mat, fix, sold, total,
+                          f"Updated from manual entry on {datetime.now()}", existing[0]))
+                else:
+                    # Insert new
+                    cursor.execute("""
+                        INSERT INTO rework_root_cause 
+                        (ship_no, record_date, line, model, fault_category, fault_subcategory,
+                         pcba_qty, material_qty, fixing_qty, soldering_qty, total_qty, remarks, imported_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE())
+                    """, (ship, record_date, line, model, cat.strip(), sub.strip(),
+                          pcb, mat, fix, sold, total,
+                          f"Imported from manual entry on {datetime.now()}"))
+            conn.commit()
+        return True
 
     @handle_db_errors
-    def add_fault_category(self, name: str, station: str, created_by: int = None, icon: str = None) -> Optional[int]:
+    def add_fault_category(self, name: str, station: str, created_by: int = None, icon: str = None, phone_type: str = 'Both') -> Optional[int]:
         with self.get_connection() as conn:
             c = conn.cursor()
             c.execute("SELECT COALESCE(MAX(display_order),0)+1 FROM fault_categories WHERE station_type=?", (station,))
             order = c.fetchone()[0]
-            c.execute("INSERT INTO fault_categories (category_name, station_type, display_order, created_by, icon, created_at) VALUES (?,?,?,?,?,GETDATE()) SELECT SCOPE_IDENTITY()", (name, station, order, created_by, icon))
-            cat_id = c.fetchone()[0]
-            self.log_audit('fault_categories', cat_id, 'CREATE', None, name, created_by)
-            self.invalidate_fault_cache()
+            c.execute("""
+                INSERT INTO fault_categories (category_name, station_type, display_order, created_by, icon, created_at, phone_type)
+                OUTPUT INSERTED.id
+                VALUES (?, ?, ?, ?, ?, GETDATE(), ?)
+            """, (name, station, order, created_by, icon, phone_type))
+            row = c.fetchone()
+            cat_id = row[0] if row else None
+            if cat_id:
+                self.log_audit('fault_categories', cat_id, 'CREATE', None, name, created_by)
+                self.invalidate_fault_cache()
             return cat_id
-
+        
     @handle_db_errors
     def add_fault(self, cat_id: int, name: str, code: str = None, severity: str = 'Minor', created_by: int = None) -> Optional[int]:
-        if severity not in ['Critical','Major','Minor']: severity = 'Minor'
+        if severity not in ['Critical','Major','Minor']:
+            severity = 'Minor'
         with self.get_connection() as conn:
             c = conn.cursor()
             c.execute("SELECT COALESCE(MAX(display_order),0)+1 FROM faults WHERE category_id=?", (cat_id,))
             order = c.fetchone()[0]
-            c.execute("INSERT INTO faults (category_id, fault_name, fault_code, severity, display_order, created_by, created_at) VALUES (?,?,?,?,?,?,GETDATE()) SELECT SCOPE_IDENTITY()", (cat_id, name, code, severity, order, created_by))
-            fid = c.fetchone()[0]
-            self.log_audit('faults', fid, 'CREATE', None, name, created_by)
-            self.invalidate_fault_cache()
+            c.execute("""
+                INSERT INTO faults (category_id, fault_name, fault_code, severity, display_order, created_by, created_at)
+                OUTPUT INSERTED.id
+                VALUES (?, ?, ?, ?, ?, ?, GETDATE())
+            """, (cat_id, name, code, severity, order, created_by))
+            row = c.fetchone()
+            fid = row[0] if row else None
+            if fid:
+                self.log_audit('faults', fid, 'CREATE', None, name, created_by)
+                self.invalidate_fault_cache()
             return fid
-
+    
     @handle_db_errors
     def update_fault(self, fid: int, name: str = None, code: str = None, severity: str = None, active: bool = None, updated_by: int = None) -> bool:
         updates, p = [], []

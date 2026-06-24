@@ -11,3 +11,4 @@ try:
     print(f"✅ User created with ID: {user_id}")
 except Exception as e:
     print(f"❌ Failed: {e}")
+    

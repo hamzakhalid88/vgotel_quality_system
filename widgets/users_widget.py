@@ -14,10 +14,11 @@ from config import ROLES
 import re
 from functools import partial
 from typing import Dict, List
+from custom_dialogs import CustomMessageBox
 
 
 # ─────────────────────────────────────────────
-#  GLOBAL DESIGN TOKENS
+#  GLOBAL DESIGN TOKENS (unchanged)
 # ─────────────────────────────────────────────
 COLORS = {
     "primary":        "#1A56DB",
@@ -275,7 +276,7 @@ class UserDialog(QDialog):
         super().__init__(parent)
         self.db = db
         self.user_data = user_data
-        self.pwd_toggle = QPushButton()  # placeholder, will be recreated
+        self.pwd_toggle = QPushButton()
         self.confirm_toggle = QPushButton()
         self.setup_ui()
         self.setup_validations()
@@ -285,10 +286,8 @@ class UserDialog(QDialog):
         else:
             self.setWindowTitle("Create New User")
 
-        # Professional window placement & sizing
         center_and_fit_dialog(self, margin=40)
 
-    # ────────────── UI CONSTRUCTION (single, clean version) ──────────────
     def setup_ui(self):
         self.setModal(True)
         self.setMinimumSize(800, 600)
@@ -299,11 +298,9 @@ class UserDialog(QDialog):
         root.setSpacing(0)
         root.setContentsMargins(0, 0, 0, 0)
 
-        # ---------- Header ----------
         header = self._create_header()
         root.addWidget(header)
 
-        # ---------- Scroll Area (ensures scrolling) ----------
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -316,38 +313,31 @@ class UserDialog(QDialog):
         body_layout.setSpacing(22)
         body_layout.setContentsMargins(28, 24, 28, 24)
 
-        # Account Details Card
         body_layout.addWidget(self._section_label("Account Details", "Basic profile information"))
         account_card = self._create_card()
         self._setup_account_grid(account_card)
         body_layout.addWidget(account_card)
 
-        # Security Card
         body_layout.addWidget(self._section_label("Security Settings", "Password and account status"))
         security_card = self._create_card()
         self._setup_security_grid(security_card)
         body_layout.addWidget(security_card)
 
-        # Tip Banner (edit mode)
         if self.user_data:
             body_layout.addWidget(self._create_tip_banner())
 
         body_layout.addStretch()
         scroll.setWidget(body)
-        root.addWidget(scroll, 1)   # scroll area takes all extra space
+        root.addWidget(scroll, 1)
 
-        # ---------- Footer ----------
         footer = self._create_footer()
         root.addWidget(footer)
 
-        # Signals
         self.pwd_toggle.toggled.connect(self.toggle_password)
         self.confirm_toggle.toggled.connect(self.toggle_confirm)
-
-        # Tab order
         self._set_tab_order()
 
-    # ────────────── Helper methods (clean, no duplication) ──────────────
+    # ────────────── Helper methods ──────────────
     def _create_header(self):
         header = QFrame()
         header.setFixedHeight(68)
@@ -419,36 +409,30 @@ class UserDialog(QDialog):
         grid.setVerticalSpacing(14)
         grid.setContentsMargins(24, 24, 24, 24)
 
-        # Username
         self.username = QLineEdit()
         self.username.setPlaceholderText("e.g., john.doe")
         if self.user_data:
             self.username.setReadOnly(True)
         self._add_field_to_grid(grid, "Username *", self.username, 0, 0)
 
-        # Full name
         self.full_name = QLineEdit()
         self.full_name.setPlaceholderText("Full legal name")
         self._add_field_to_grid(grid, "Full Name *", self.full_name, 0, 1)
 
-        # Email with badge
         email_wrap, self.email, self.email_status = self._create_badge_input()
         self.email.setPlaceholderText("user@example.com")
         self._add_field_to_grid(grid, "Email Address", email_wrap, 1, 0)
 
-        # Phone with badge
         phone_wrap, self.phone, self.phone_status = self._create_badge_input()
         self.phone.setPlaceholderText("+92 300 1234567")
         self._add_field_to_grid(grid, "Phone Number", phone_wrap, 1, 1)
 
-        # Role
         self.role = QComboBox()
         for txt, val in [("Administrator", "admin"), ("Manager", "manager"),
                          ("Inspector", "inspector"), ("Viewer", "viewer")]:
             self.role.addItem(txt, val)
         self._add_field_to_grid(grid, "Role *", self.role, 2, 0)
 
-        # Department
         self.department = QComboBox()
         self.department.addItems(["Quality Control", "Quality Assurance", "Production",
                                   "Maintenance", "R&D", "Management", "IT", "Logistics"])
@@ -464,14 +448,12 @@ class UserDialog(QDialog):
         grid.setVerticalSpacing(12)
         grid.setContentsMargins(24, 24, 24, 24)
 
-        # Password with eye button
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
         self.password.setPlaceholderText("Leave blank to keep current" if self.user_data else "Min. 6 characters")
         pwd_wrap, self.pwd_toggle = self._create_password_widget(self.password)
         self._add_to_sec_grid(grid, "New Password", pwd_wrap, 0)
 
-        # Strength meter
         self.pwd_strength_bar = QProgressBar()
         self.pwd_strength_bar.setRange(0, 4)
         self.pwd_strength_bar.setValue(0)
@@ -491,14 +473,12 @@ class UserDialog(QDialog):
         s_layout.addWidget(self.pwd_strength_label)
         grid.addWidget(strength_widget, 1, 1, 1, 2)
 
-        # Confirm password
         self.confirm_password = QLineEdit()
         self.confirm_password.setEchoMode(QLineEdit.Password)
         self.confirm_password.setPlaceholderText("Re-enter password")
         confirm_wrap, self.confirm_toggle = self._create_password_widget(self.confirm_password)
         self._add_to_sec_grid(grid, "Confirm Password", confirm_wrap, 2)
 
-        # Hint
         hint = QLabel("Minimum 6 characters. Use uppercase, numbers and symbols for a stronger password.")
         hint.setWordWrap(True)
         hint.setStyleSheet(f"""
@@ -508,7 +488,6 @@ class UserDialog(QDialog):
         """)
         grid.addWidget(hint, 3, 1, 1, 2)
 
-        # Active status
         status_card = QFrame()
         status_card.setStyleSheet(f"""
             QFrame {{
@@ -758,27 +737,43 @@ class UserDialog(QDialog):
     def validate_and_accept(self):
         if not self.user_data:
             if not self.username.text().strip():
-                QMessageBox.warning(self, "Validation", "Username is required."); return
+                CustomMessageBox.show_warning(self, "Validation", "Username is required.")
+                return
             if len(self.username.text().strip()) < 3:
-                QMessageBox.warning(self, "Validation", "Username must be at least 3 characters."); return
+                CustomMessageBox.show_warning(self, "Validation", "Username must be at least 3 characters.")
+                return
             if not self.check_username_availability():
-                QMessageBox.warning(self, "Validation", "Username already exists."); return
+                CustomMessageBox.show_warning(self, "Validation", "Username already exists.")
+                return
         if not self.full_name.text().strip():
-            QMessageBox.warning(self, "Validation", "Full name is required."); return
+            CustomMessageBox.show_warning(self, "Validation", "Full name is required.")
+            return
         if not self.validate_email():
-            QMessageBox.warning(self, "Validation", "Invalid or duplicate email."); return
+            CustomMessageBox.show_warning(self, "Validation", "Invalid or duplicate email.")
+            return
         if not self.validate_phone():
-            QMessageBox.warning(self, "Validation", "Invalid phone number format."); return
+            CustomMessageBox.show_warning(self, "Validation", "Invalid phone number format.")
+            return
         if not self.user_data:
             pwd = self.password.text()
-            if not pwd: QMessageBox.warning(self, "Validation", "Password is required."); return
-            if len(pwd) < 6: QMessageBox.warning(self, "Validation", "Password too short (min 6 chars)."); return
-            if pwd != self.confirm_password.text(): QMessageBox.warning(self, "Validation", "Passwords do not match."); return
+            if not pwd:
+                CustomMessageBox.show_warning(self, "Validation", "Password is required.")
+                return
+            if len(pwd) < 6:
+                CustomMessageBox.show_warning(self, "Validation", "Password too short (min 6 chars).")
+                return
+            if pwd != self.confirm_password.text():
+                CustomMessageBox.show_warning(self, "Validation", "Passwords do not match.")
+                return
         else:
             pwd = self.password.text()
             if pwd:
-                if len(pwd) < 6: QMessageBox.warning(self, "Validation", "Password too short."); return
-                if pwd != self.confirm_password.text(): QMessageBox.warning(self, "Validation", "Passwords do not match."); return
+                if len(pwd) < 6:
+                    CustomMessageBox.show_warning(self, "Validation", "Password too short.")
+                    return
+                if pwd != self.confirm_password.text():
+                    CustomMessageBox.show_warning(self, "Validation", "Passwords do not match.")
+                    return
         self.accept()
 
     def get_user_data(self):
@@ -822,8 +817,6 @@ class PermissionManagerDialog(QDialog):
 
         self.setup_ui()
         self.load_data()
-
-        # Professional placement
         center_and_fit_dialog(self, margin=40)
 
     def setup_ui(self):
@@ -831,7 +824,6 @@ class PermissionManagerDialog(QDialog):
         root.setSpacing(0)
         root.setContentsMargins(0, 0, 0, 0)
 
-        # HEADER
         header = QFrame()
         header.setFixedHeight(80)
         header.setStyleSheet(f"""
@@ -842,7 +834,6 @@ class PermissionManagerDialog(QDialog):
         hl.setContentsMargins(24, 0, 24, 0)
         hl.setSpacing(16)
 
-        # User avatar initials
         initials = "".join([w[0].upper() for w in self.full_name.split()[:2]])
         av = QLabel(initials)
         av.setFixedSize(48, 48)
@@ -881,7 +872,6 @@ class PermissionManagerDialog(QDialog):
         hl.addWidget(role_badge)
         root.addWidget(header)
 
-        # INSTRUCTION STRIP
         tip_strip = QFrame()
         tip_strip.setStyleSheet(f"""
             QFrame {{
@@ -899,7 +889,6 @@ class PermissionManagerDialog(QDialog):
         tsl.addWidget(tip_lbl)
         root.addWidget(tip_strip)
 
-        # SCROLL AREA
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -915,7 +904,6 @@ class PermissionManagerDialog(QDialog):
         scroll.setWidget(self.scroll_content)
         root.addWidget(scroll, 1)
 
-        # FOOTER
         footer = QFrame()
         footer.setFixedHeight(68)
         footer.setStyleSheet(f"""
@@ -928,7 +916,6 @@ class PermissionManagerDialog(QDialog):
         fl.setContentsMargins(24, 0, 24, 0)
         fl.setSpacing(10)
 
-        # Left side: utility buttons
         self.select_all_btn = QPushButton("Select All")
         self.select_all_btn.setFixedHeight(36)
         self.select_all_btn.setStyleSheet(f"""
@@ -1015,7 +1002,6 @@ class PermissionManagerDialog(QDialog):
         page_icon  = page_data.get('icon', '')
         functions  = page_data.get('functions', [])
 
-        # Outer card
         card = QFrame()
         card.setStyleSheet(f"""
             QFrame {{
@@ -1030,7 +1016,6 @@ class PermissionManagerDialog(QDialog):
         cl.setSpacing(10)
         cl.setContentsMargins(0, 0, 0, 0)
 
-        # Card header bar
         header_bar = QFrame()
         header_bar.setStyleSheet(f"""
             QFrame {{
@@ -1075,7 +1060,6 @@ class PermissionManagerDialog(QDialog):
 
         cl.addWidget(header_bar)
 
-        # Functions row
         func_widget = QWidget()
         func_widget.setStyleSheet("background:transparent;")
         func_layout = QHBoxLayout(func_widget)
@@ -1127,7 +1111,6 @@ class PermissionManagerDialog(QDialog):
         func_layout.addStretch()
         cl.addWidget(func_widget)
 
-        # Set initial checkbox states
         page_allowed = any(
             p['page_id'] == page_id and p['is_allowed']
             for p in user_permissions
@@ -1161,7 +1144,7 @@ class PermissionManagerDialog(QDialog):
                 self.create_page_card(page, user_perms)
             self.scroll_layout.addStretch()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load permissions:\n{str(e)}")
+            CustomMessageBox.show_error(self, "Error", f"Failed to load permissions:\n{str(e)}")
 
     def select_all(self):
         for cb in self.page_checkboxes.values(): cb.setChecked(True)
@@ -1172,15 +1155,16 @@ class PermissionManagerDialog(QDialog):
         for cb in self.permission_widgets.values(): cb.setChecked(False)
 
     def reset_to_role_default(self):
-        r = QMessageBox.question(self, "Confirm Reset",
+        reply = CustomMessageBox.show_question(self, "Confirm Reset",
                                  "Reset permissions to role defaults?\nCurrent changes will be lost.",
-                                 QMessageBox.Yes | QMessageBox.No)
-        if r == QMessageBox.Yes:
+                                 buttons=CustomMessageBox.Yes | CustomMessageBox.No,
+                                 default_button=CustomMessageBox.No)
+        if reply == CustomMessageBox.Yes:
             user = self.db.get_user_by_id(self.user_id)
             if user:
                 self.db.apply_role_permissions(self.user_id, user.get('role', 'viewer'))
                 self.clear_layout(); self.load_data()
-                QMessageBox.information(self, "Done", "Permissions reset to role defaults.")
+                CustomMessageBox.show_info(self, "Done", "Permissions reset to role defaults.")
 
     def clear_layout(self):
         while self.scroll_layout.count():
@@ -1203,12 +1187,12 @@ class PermissionManagerDialog(QDialog):
             ok = self.db.save_user_permissions(self.user_id, permissions, self.current_admin_id)
             if ok:
                 self.permissions_saved.emit(self.user_id)
-                QMessageBox.information(self, "Saved", "Permissions saved successfully.")
+                CustomMessageBox.show_info(self, "Saved", "Permissions saved successfully.")
                 self.accept()
             else:
-                QMessageBox.warning(self, "Error", "Failed to save permissions.")
+                CustomMessageBox.show_warning(self, "Error", "Failed to save permissions.")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Save failed:\n{str(e)}")
+            CustomMessageBox.show_error(self, "Error", f"Save failed:\n{str(e)}")
 
 
 # ─────────────────────────────────────────────
@@ -1235,7 +1219,7 @@ class UsersWidget(QWidget):
         root.setSpacing(16)
         root.setContentsMargins(24, 24, 24, 24)
 
-        # ── HEADER CARD ──────────────────────
+        # HEADER CARD
         header_card = QFrame()
         header_card.setFixedHeight(80)
         header_card.setStyleSheet(f"""
@@ -1284,7 +1268,7 @@ class UsersWidget(QWidget):
 
         root.addWidget(header_card)
 
-        # ── CONTROL BAR ──────────────────────
+        # CONTROL BAR
         ctrl_card = QFrame()
         ctrl_card.setStyleSheet(f"""
             QFrame {{
@@ -1299,7 +1283,6 @@ class UsersWidget(QWidget):
         ctrl_layout.setContentsMargins(18, 12, 18, 12)
         ctrl_layout.setSpacing(12)
 
-        # Search
         search_container = QFrame()
         search_container.setStyleSheet(f"""
             QFrame {{
@@ -1325,7 +1308,6 @@ class UsersWidget(QWidget):
 
         ctrl_layout.addWidget(search_container, 2)
 
-        # Divider
         div = QFrame(); div.setFrameShape(QFrame.VLine)
         div.setStyleSheet(f"color:{COLORS['border']};")
         ctrl_layout.addWidget(div)
@@ -1385,7 +1367,6 @@ class UsersWidget(QWidget):
 
         root.addWidget(ctrl_card)
 
-        # Loading bar
         self.loading_bar = QProgressBar()
         self.loading_bar.setVisible(False)
         self.loading_bar.setFixedHeight(3)
@@ -1396,7 +1377,7 @@ class UsersWidget(QWidget):
         """)
         root.addWidget(self.loading_bar)
 
-        # ── TABLE ────────────────────────────
+        # TABLE
         table_card = QFrame()
         table_card.setStyleSheet(f"""
             QFrame {{
@@ -1483,7 +1464,6 @@ class UsersWidget(QWidget):
         self.users_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.users_table.customContextMenuRequested.connect(self.show_context_menu)
 
-        # STATUS BAR
         self.status_bar = QStatusBar()
         self.status_bar.setFixedHeight(30)
         self.status_bar.setStyleSheet(f"""
@@ -1512,7 +1492,7 @@ class UsersWidget(QWidget):
                 f"Total: {len(self.all_users)}    Active: {active_count}")
             self.status_bar.showMessage(f"Loaded {len(self.all_users)} users", 3000)
         except Exception as e:
-            QMessageBox.critical(self, "Database Error", f"Failed to load users:\n{str(e)}")
+            CustomMessageBox.show_error(self, "Database Error", f"Failed to load users:\n{str(e)}")
         finally:
             self.loading_bar.setVisible(False)
             self.loading_bar.setRange(0, 100)
@@ -1558,7 +1538,6 @@ class UsersWidget(QWidget):
         self.users_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
 
         for row, user in enumerate(users):
-            # Avatar
             av = QLabel()
             px = self.get_initials_avatar(user.get('full_name', 'U'), 36)
             av.setPixmap(px)
@@ -1566,13 +1545,11 @@ class UsersWidget(QWidget):
             av.setToolTip(user.get('full_name', ''))
             self.users_table.setCellWidget(row, 0, av)
 
-            # Text cells
             for col, key in enumerate(['username', 'full_name', 'email'], start=1):
                 item = QTableWidgetItem(str(user.get(key, '')))
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.users_table.setItem(row, col, item)
 
-            # Role badge cell
             role = str(user.get('role', 'viewer')).lower()
             role_colors_map = {
                 "admin":     ("#FEF3C7", "#92400E", "#D97706"),
@@ -1588,7 +1565,6 @@ class UsersWidget(QWidget):
             role_item.setTextAlignment(Qt.AlignCenter)
             self.users_table.setItem(row, 4, role_item)
 
-            # Status
             is_active = user.get('is_active', False)
             st_item = QTableWidgetItem("Active" if is_active else "Inactive")
             st_item.setForeground(QBrush(QColor(COLORS['success'] if is_active else COLORS['danger'])))
@@ -1598,7 +1574,6 @@ class UsersWidget(QWidget):
             st_item.setFlags(st_item.flags() & ~Qt.ItemIsEditable)
             self.users_table.setItem(row, 5, st_item)
 
-            # Last login
             ll = user.get('last_login')
             ll_str = str(ll)[:16] if ll else "Never logged in"
             ll_item = QTableWidgetItem(ll_str)
@@ -1606,7 +1581,6 @@ class UsersWidget(QWidget):
             ll_item.setFlags(ll_item.flags() & ~Qt.ItemIsEditable)
             self.users_table.setItem(row, 6, ll_item)
 
-            # Actions
             aw = QWidget()
             aw.setStyleSheet("background:transparent;")
             al = QHBoxLayout(aw)
@@ -1629,7 +1603,6 @@ class UsersWidget(QWidget):
                 """)
                 return b
 
-            # Permissions btn (admin only)
             perm_btn = _action_btn("P", COLORS['primary_light'], COLORS['primary'],
                                    COLORS['primary'])
             perm_btn.setToolTip("Manage Permissions")
@@ -1640,14 +1613,12 @@ class UsersWidget(QWidget):
                 perm_btn.setVisible(False)
             al.addWidget(perm_btn)
 
-            # Edit btn
             edit_btn = _action_btn("E", "#EEF2FF", COLORS['primary'],
                                    COLORS['primary'])
             edit_btn.setToolTip("Edit User")
             edit_btn.clicked.connect(partial(self.edit_user, user.get('id')))
             al.addWidget(edit_btn)
 
-            # Toggle btn
             toggle_lbl = "On" if not is_active else "Off"
             toggle_bg   = COLORS['success_light'] if not is_active else COLORS['warning_light']
             toggle_fg   = COLORS['success'] if not is_active else COLORS['warning']
@@ -1657,7 +1628,6 @@ class UsersWidget(QWidget):
             toggle_btn.clicked.connect(partial(self.toggle_user_status, user.get('id'), is_active))
             al.addWidget(toggle_btn)
 
-            # Delete btn
             del_btn = _action_btn("X", COLORS['danger_light'], COLORS['danger'],
                                   COLORS['danger'])
             del_btn.setToolTip("Delete User")
@@ -1665,7 +1635,6 @@ class UsersWidget(QWidget):
             al.addWidget(del_btn)
             al.addStretch()
 
-            # Permission-based visibility
             if self.user_role != 'admin':
                 del_btn.setVisible(False)
                 if self.user_role == 'manager':
@@ -1688,7 +1657,7 @@ class UsersWidget(QWidget):
         uid  = self.displayed_user_ids[row]
         user = next((u for u in self.all_users if u.get('id') == uid), None)
         if user and self.user_role == 'manager' and user.get('role') == 'admin':
-            QMessageBox.warning(self, "Access Denied", "Cannot edit administrators.")
+            CustomMessageBox.show_warning(self, "Access Denied", "Cannot edit administrators.")
             return
         self.edit_user(uid)
 
@@ -1751,14 +1720,11 @@ class UsersWidget(QWidget):
 
     # ── CRUD ACTIONS ─────────────────────────
     def manage_permissions(self, user_id: int, username: str, full_name: str):
-        """Open permission manager for selected user"""
         if self.user_role != 'admin':
-            QMessageBox.warning(self, "Access Denied",
-                                "Only administrators can manage permissions.")
+            CustomMessageBox.show_warning(self, "Access Denied", "Only administrators can manage permissions.")
             return
         if self.current_user_id and user_id == self.current_user_id:
-            QMessageBox.information(self, "Info",
-                                    "As the current admin, you have full access automatically.")
+            CustomMessageBox.show_info(self, "Info", "As the current admin, you have full access automatically.")
             return
         dialog = PermissionManagerDialog(
             self.db, user_id, username, full_name,
@@ -1770,8 +1736,7 @@ class UsersWidget(QWidget):
 
     def add_user(self):
         if self.user_role not in ['admin', 'manager']:
-            QMessageBox.warning(self, "Access Denied",
-                                "You do not have permission to add users.")
+            CustomMessageBox.show_warning(self, "Access Denied", "You do not have permission to add users.")
             return
         dialog = UserDialog(self.db, parent=self)
         if dialog.exec_() == QDialog.Accepted:
@@ -1783,20 +1748,18 @@ class UsersWidget(QWidget):
                 self.status_bar.showMessage(
                     f"User '{user_data.get('username')}' created successfully.", 4000)
             else:
-                QMessageBox.critical(self, "Error",
-                                     "Failed to create user. Username may already exist.")
+                CustomMessageBox.show_error(self, "Error", "Failed to create user. Username may already exist.")
 
     def edit_user(self, user_id):
         if self.user_role not in ['admin', 'manager']:
-            QMessageBox.warning(self, "Access Denied",
-                                "You do not have permission to edit users.")
+            CustomMessageBox.show_warning(self, "Access Denied", "You do not have permission to edit users.")
             return
         user = next((u for u in self.all_users if u.get('id') == user_id), None)
         if not user:
-            QMessageBox.warning(self, "Error", "User not found."); return
+            CustomMessageBox.show_warning(self, "Error", "User not found.")
+            return
         if self.user_role == 'manager' and user.get('role') == 'admin':
-            QMessageBox.warning(self, "Access Denied",
-                                "Managers cannot edit administrator accounts.")
+            CustomMessageBox.show_warning(self, "Access Denied", "Managers cannot edit administrator accounts.")
             return
         dialog = UserDialog(self.db, user_data=user, parent=self)
         if dialog.exec_() == QDialog.Accepted:
@@ -1806,58 +1769,56 @@ class UsersWidget(QWidget):
                 self.status_bar.showMessage(
                     f"User '{user.get('username')}' updated successfully.", 3000)
             else:
-                QMessageBox.critical(self, "Error", "Failed to update user.")
+                CustomMessageBox.show_error(self, "Error", "Failed to update user.")
 
     def toggle_user_status(self, user_id, current_status):
         if self.user_role not in ['admin', 'manager']:
-            QMessageBox.warning(self, "Access Denied",
-                                "You do not have permission to change user status.")
+            CustomMessageBox.show_warning(self, "Access Denied", "You do not have permission to change user status.")
             return
         user = next((u for u in self.all_users if u.get('id') == user_id), None)
         if not user: return
         if self.user_role == 'manager' and user.get('role') == 'admin':
-            QMessageBox.warning(self, "Access Denied",
-                                "Managers cannot change administrator status.")
+            CustomMessageBox.show_warning(self, "Access Denied", "Managers cannot change administrator status.")
             return
         new_status = not current_status
         action     = "activate" if new_status else "deactivate"
 
-        reply = QMessageBox.question(
+        reply = CustomMessageBox.show_question(
             self, "Confirm Action",
             f"Are you sure you want to {action} '{user.get('username')}'?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            buttons=CustomMessageBox.Yes | CustomMessageBox.No,
+            default_button=CustomMessageBox.No
         )
-        if reply == QMessageBox.Yes:
+        if reply == CustomMessageBox.Yes:
             if self.db.update_user(user_id, {'is_active': new_status}):
                 self.load_users()
                 self.status_bar.showMessage(
                     f"User '{user.get('username')}' {action}d successfully.", 3000)
             else:
-                QMessageBox.critical(self, "Error", "Failed to update user status.")
+                CustomMessageBox.show_error(self, "Error", "Failed to update user status.")
 
     def delete_user(self, user_id, username):
         if self.user_role != 'admin':
-            QMessageBox.warning(self, "Access Denied",
-                                "Only administrators can delete users.")
+            CustomMessageBox.show_warning(self, "Access Denied", "Only administrators can delete users.")
             return
         if self.current_user_id and user_id == self.current_user_id:
-            QMessageBox.warning(self, "Action Denied",
-                                "You cannot delete your own account.")
+            CustomMessageBox.show_warning(self, "Action Denied", "You cannot delete your own account.")
             return
 
         reply = QMessageBox.question(
-            self, "Confirm Deletion",
+            self,
+            "Confirm Deletion",
             f"Permanently delete user '{username}'?\n\nThis action cannot be undone.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            if self.db.delete_user(user_id):
-                self.load_users()
-                self.status_bar.showMessage(
-                    f"User '{username}' deleted permanently.", 4000)
-            else:
-                QMessageBox.critical(
-                    self, "Error",
-                    "Deletion failed. The user may have associated records in the system.")
+            try:
+                success = self.db.delete_user(user_id, soft_delete=False)   # <-- hard delete
+                if success:
+                    self.load_users()
+                    self.status_bar.showMessage(f"User '{username}' deleted permanently.", 4000)
+                else:
+                    CustomMessageBox.show_error(self, "Error", "Failed to delete user. Check if user has dependent records.")
+            except Exception as e:
+                CustomMessageBox.show_error(self, "Error", f"Deletion failed: {str(e)}")

@@ -11,9 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve, QSize
 from PyQt5.QtGui import QFont, QColor, QIcon, QPalette, QLinearGradient, QBrush
 from database import Database
-from custom_dialogs import CustomMessageBox   # <-- modern message box
-
-# Remove the local CustomMessageBox class definition entirely
+from custom_dialogs import CustomMessageBox
 
 
 class FaultManagementWidget(QWidget):
@@ -33,7 +31,7 @@ class FaultManagementWidget(QWidget):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
         
-        # Small Compact Header
+        # Header
         header = QFrame()
         header.setStyleSheet("""
             QFrame {
@@ -56,7 +54,6 @@ class FaultManagementWidget(QWidget):
         header_layout.addWidget(header_title)
         header_layout.addStretch()
         
-        # Stats label
         self.stats_label = QLabel("Ready")
         self.stats_label.setStyleSheet("color: rgba(255,255,255,0.9); font-size: 11px;")
         header_layout.addWidget(self.stats_label)
@@ -64,18 +61,16 @@ class FaultManagementWidget(QWidget):
         header.setLayout(header_layout)
         main_layout.addWidget(header)
         
-        # Main content area
+        # Main content
         content_widget = QWidget()
         content_widget.setStyleSheet("background: #f0f2f5; border-radius: 10px;")
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(10, 10, 10, 10)
         content_layout.setSpacing(10)
         
-        # Left Panel - Categories (30% width)
         left_panel = self.create_left_panel()
         content_layout.addWidget(left_panel)
         
-        # Right Panel - Faults Management (70% width)
         right_panel = self.create_right_panel()
         content_layout.addWidget(right_panel)
         
@@ -89,7 +84,6 @@ class FaultManagementWidget(QWidget):
         self.setStyleSheet("background: #f0f2f5;")
     
     def create_left_panel(self):
-        """Create left panel with station and category selection"""
         panel = QFrame()
         panel.setStyleSheet("""
             QFrame {
@@ -102,13 +96,14 @@ class FaultManagementWidget(QWidget):
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
         
-        # Station Selection - Compact
+        # Station Selection
         station_title = QLabel("📡 Station")
         station_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #2d3748;")
         layout.addWidget(station_title)
         
         self.station_combo = QComboBox()
-        self.station_combo.addItems(["Semi Test", "MMI Test", "Appearance Test", "Final Test"])
+        # Added "Rework" station
+        self.station_combo.addItems(["Semi Test", "MMI Test", "Appearance Test", "Final Test", "Rework"])
         self.station_combo.setStyleSheet("""
             QComboBox {
                 padding: 8px;
@@ -124,18 +119,15 @@ class FaultManagementWidget(QWidget):
         self.station_combo.currentTextChanged.connect(self.on_station_changed)
         layout.addWidget(self.station_combo)
         
-        # Divider
         divider = QFrame()
         divider.setFrameShape(QFrame.HLine)
         divider.setStyleSheet("background: #e2e8f0; max-height: 1px; margin: 8px 0;")
         layout.addWidget(divider)
         
-        # Categories Section
         categories_title = QLabel("📂 Categories")
         categories_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #2d3748;")
         layout.addWidget(categories_title)
         
-        # Search box - Compact
         self.category_search = QLineEdit()
         self.category_search.setPlaceholderText("🔍 Search...")
         self.category_search.setStyleSheet("""
@@ -175,7 +167,6 @@ class FaultManagementWidget(QWidget):
         self.categories_list.itemClicked.connect(self.on_category_selected)
         layout.addWidget(self.categories_list)
         
-        # Add Category Button - Compact
         add_category_btn = QPushButton("➕ New Category")
         add_category_btn.setStyleSheet("""
             QPushButton {
@@ -199,7 +190,6 @@ class FaultManagementWidget(QWidget):
         return panel
     
     def create_right_panel(self):
-        """Create right panel with faults management - BIG TABLE"""
         panel = QFrame()
         panel.setStyleSheet("""
             QFrame {
@@ -212,7 +202,6 @@ class FaultManagementWidget(QWidget):
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
         
-        # Category Header - Compact
         header_frame = QFrame()
         header_frame.setStyleSheet("""
             QFrame {
@@ -246,7 +235,7 @@ class FaultManagementWidget(QWidget):
         header_frame.setLayout(header_layout)
         layout.addWidget(header_frame)
         
-        # Add New Fault Section - Compact
+        # Add Fault
         add_fault_group = QGroupBox("➕ Add Fault")
         add_fault_group.setStyleSheet("""
             QGroupBox {
@@ -316,12 +305,10 @@ class FaultManagementWidget(QWidget):
         add_fault_group.setLayout(add_fault_layout)
         layout.addWidget(add_fault_group)
         
-        # Faults Table - BIG SIZE
         faults_title = QLabel("📋 Existing Faults")
         faults_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #2d3748; margin-top: 5px;")
         layout.addWidget(faults_title)
         
-        # Create BIG Table for faults
         self.faults_table = QTableWidget()
         self.faults_table.setColumnCount(3)
         self.faults_table.setHorizontalHeaderLabels(["Severity", "Fault Name", "Fault Code"])
@@ -357,10 +344,9 @@ class FaultManagementWidget(QWidget):
         self.faults_table.setSelectionMode(QTableWidget.SingleSelection)
         self.faults_table.verticalHeader().setVisible(False)
         self.faults_table.setAlternatingRowColors(True)
-        self.faults_table.setMinimumHeight(400)  # BIG TABLE
+        self.faults_table.setMinimumHeight(400)
         layout.addWidget(self.faults_table)
         
-        # Action Buttons - Compact
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
@@ -425,36 +411,39 @@ class FaultManagementWidget(QWidget):
         return panel
     
     def filter_categories(self):
-        """Filter categories based on search text"""
         search_text = self.category_search.text().lower()
         for i in range(self.categories_list.count()):
             item = self.categories_list.item(i)
             item.setHidden(search_text not in item.text().lower())
     
     def load_data(self):
-        """Load all data from database"""
         self.current_category_id = None
         self.current_category_name = None
         self.load_categories()
     
     def load_categories(self):
-        """Load categories for selected station"""
         station = self.station_combo.currentText()
-        categories = self.db.get_fault_categories(station)
+        categories = self.db.get_fault_categories(station)  # returns all categories for station
         
         self.categories_list.clear()
         
         if categories:
             for category in categories:
-                category_name = category.get('category_name', '')
-                item = QListWidgetItem(f"{category_name}")
-                item.setData(Qt.UserRole, category.get('id'))
+                cat_id = category.get('id')
+                cat_name = category.get('category_name', '')
+                phone_type = category.get('phone_type', 'Both')
+                # Display phone type in parentheses
+                display_text = f"{cat_name} ({phone_type})" if phone_type != 'Both' else cat_name
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.UserRole, cat_id)
+                item.setToolTip(f"ID: {cat_id}\nPhone Type: {phone_type}")
                 self.categories_list.addItem(item)
             
             self.stats_label.setText(f"📊 {len(categories)} Cats")
+        else:
+            self.stats_label.setText("📊 0 Cats")
     
     def on_station_changed(self, station):
-        """When station changes, reload categories"""
         self.load_categories()
         self.category_header.setText("Select Category")
         self.fault_count_label.setText("")
@@ -463,15 +452,12 @@ class FaultManagementWidget(QWidget):
         self.category_search.clear()
     
     def on_category_selected(self, item):
-        """When category is selected, load faults"""
         self.current_category_id = item.data(Qt.UserRole)
-        self.current_category_name = item.text()
-        
-        self.category_header.setText(f"{self.current_category_name}")
+        self.current_category_name = item.text().split(' (')[0]  # remove phone type suffix
+        self.category_header.setText(self.current_category_name)
         self.load_faults()
     
     def load_faults(self):
-        """Load faults for selected category"""
         if not self.current_category_id:
             return
         
@@ -518,7 +504,6 @@ class FaultManagementWidget(QWidget):
             self.fault_count_label.setText("🔧 No Faults")
     
     def get_selected_fault_id(self):
-        """Get selected fault ID from table"""
         current_row = self.faults_table.currentRow()
         if current_row >= 0:
             item = self.faults_table.item(current_row, 0)
@@ -527,7 +512,6 @@ class FaultManagementWidget(QWidget):
         return None
     
     def add_new_fault(self):
-        """Add new fault to current category"""
         if not self.current_category_id:
             CustomMessageBox.show_warning(self, "No Category", "Please select a category first!")
             return
@@ -562,7 +546,6 @@ class FaultManagementWidget(QWidget):
             CustomMessageBox.show_error(self, "Database Error", f"Error: {str(e)}")
     
     def edit_selected_fault(self):
-        """Edit selected fault"""
         fault_id = self.get_selected_fault_id()
         if not fault_id:
             CustomMessageBox.show_warning(self, "No Selection", "Please select a fault to edit!")
@@ -676,7 +659,6 @@ class FaultManagementWidget(QWidget):
         dialog.exec_()
     
     def delete_selected_fault(self):
-        """Delete selected fault"""
         fault_id = self.get_selected_fault_id()
         if not fault_id:
             CustomMessageBox.show_warning(self, "No Selection", "Please select a fault to delete!")
@@ -694,11 +676,10 @@ class FaultManagementWidget(QWidget):
             self.load_faults()
     
     def add_new_category(self):
-        """Add new category"""
         dialog = QDialog(self)
         dialog.setWindowTitle("Add Category")
         dialog.setModal(True)
-        dialog.setFixedSize(450, 380)
+        dialog.setFixedSize(450, 450)  # Increased height for phone type
         dialog.setStyleSheet("""
             QDialog {
                 background: white;
@@ -735,7 +716,8 @@ class FaultManagementWidget(QWidget):
         layout.addWidget(label2)
         
         station_combo = QComboBox()
-        station_combo.addItems(["Semi Test", "MMI Test", "Appearance Test", "Final Test"])
+        # Added "Rework" station
+        station_combo.addItems(["Semi Test", "MMI Test", "Appearance Test", "Final Test", "Rework"])
         station_combo.setStyleSheet("""
             QComboBox {
                 padding: 10px;
@@ -746,9 +728,28 @@ class FaultManagementWidget(QWidget):
         """)
         layout.addWidget(station_combo)
         
-        label3 = QLabel("Icon (optional):")
+        # ----- NEW: Phone Type selection -----
+        label3 = QLabel("Phone Type:")
         label3.setStyleSheet("font-weight: bold; color: #4a5568; font-size: 12px; margin-top: 10px;")
         layout.addWidget(label3)
+        
+        phone_type_combo = QComboBox()
+        phone_type_combo.addItems(["Both", "Feature", "Smart"])
+        phone_type_combo.setCurrentIndex(0)  # default Both
+        phone_type_combo.setStyleSheet("""
+            QComboBox {
+                padding: 10px;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                font-size: 13px;
+            }
+        """)
+        layout.addWidget(phone_type_combo)
+        # ------------------------------------
+        
+        label4 = QLabel("Icon (optional):")
+        label4.setStyleSheet("font-weight: bold; color: #4a5568; font-size: 12px; margin-top: 10px;")
+        layout.addWidget(label4)
         
         icon_input = QLineEdit()
         icon_input.setPlaceholderText("e.g., 🔋, 📡, 🌐")
@@ -792,15 +793,29 @@ class FaultManagementWidget(QWidget):
         def save_category():
             category_name = category_input.text().strip()
             station_type = station_combo.currentText()
+            phone_type = phone_type_combo.currentText()
             icon = icon_input.text().strip()
             
-            if category_name:
-                self.db.add_fault_category(category_name, station_type, icon=icon, created_by=self.user.get('id'))
-                CustomMessageBox.show_success(self, "Success", f"✅ Category added!")
-                dialog.accept()
-                self.load_categories()
-            else:
+            if not category_name:
                 CustomMessageBox.show_warning(self, "Error", "Enter category name!")
+                return
+            
+            try:
+                cat_id = self.db.add_fault_category(
+                    category_name, 
+                    station_type, 
+                    icon=icon, 
+                    created_by=self.user.get('id'),
+                    phone_type=phone_type   # pass phone_type
+                )
+                if cat_id:
+                    CustomMessageBox.show_success(self, "Success", f"✅ Category added!")
+                    dialog.accept()
+                    self.load_categories()
+                else:
+                    CustomMessageBox.show_error(self, "Error", "Failed to add category!")
+            except Exception as e:
+                CustomMessageBox.show_error(self, "Database Error", str(e))
         
         save_btn.clicked.connect(save_category)
         cancel_btn.clicked.connect(dialog.reject)
@@ -813,7 +828,6 @@ class FaultManagementWidget(QWidget):
         dialog.exec_()
     
     def refresh_data(self):
-        """Refresh all data"""
         self.load_categories()
         if self.current_category_id:
             self.load_faults()
